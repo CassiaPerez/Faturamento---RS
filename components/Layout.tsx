@@ -54,7 +54,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white leading-none">CROPFLOW</h1>
-              <p className="text-[10px] text-slate-400 tracking-wide uppercase font-medium mt-0.5">Faturamento RS</p>
+              <p className="text-[10px] text-slate-400 tracking-wide uppercase font-medium mt-0.5">Gestão Inteligente</p>
             </div>
           </div>
         </div>

@@ -318,7 +318,7 @@ const UserManagement: React.FC = () => {
                     type="email" 
                     required
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-crop-500 focus:border-transparent outline-none transition-all text-sm font-medium"
-                    placeholder="nome@cropfield.com"
+                    placeholder="nome@cropflow.com"
                     value={newUser.email}
                     onChange={e => setNewUser({...newUser, email: e.target.value})}
                   />

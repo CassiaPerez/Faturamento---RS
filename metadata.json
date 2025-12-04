@@ -1,6 +1,6 @@
 {
-  "name": "Cropflow - Faturamento RS",
-  "description": "Sistema corporativo de gestão de pedidos, faturamento e sincronização automática Cropflow.",
+  "name": "Cropflow",
+  "description": "Sistema corporativo de gestão de pedidos e faturamento Cropflow.",
   "requestFramePermissions": [
     "microphone"
   ]

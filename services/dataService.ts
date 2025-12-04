@@ -1,3 +1,4 @@
+
 import { Pedido, SolicitacaoFaturamento, LogSincronizacao, StatusPedido, StatusSolicitacao, Role, User } from '../types';
 import { supabase } from './supabaseClient';
 
