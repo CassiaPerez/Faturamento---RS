@@ -3,6 +3,8 @@ export enum Role {
   ADMIN = 'ADMIN',
   GERENTE = 'GERENTE',
   FATURAMENTO = 'FATURAMENTO',
+  COMERCIAL = 'COMERCIAL',
+  CREDITO = 'CREDITO',
   VENDEDOR = 'VENDEDOR'
 }
 
@@ -14,9 +16,12 @@ export enum StatusPedido {
 
 export enum StatusSolicitacao {
   PENDENTE = 'pendente',
-  APROVADO = 'aprovado',
+  EM_ANALISE = 'em_analise', // Status genérico para aprovação paralela
+  EM_ANALISE_COMERCIAL = 'em_analise_comercial', // Mantido para compatibilidade legado (se houver dados antigos)
+  EM_ANALISE_CREDITO = 'em_analise_credito', // Mantido para compatibilidade legado
+  APROVADO_PARA_FATURAMENTO = 'aprovado_para_faturamento', // Aprovado por todos, pronto para nota
   REJEITADO = 'rejeitado',
-  FATURADO = 'faturado'
+  FATURADO = 'faturado' // Processo finalizado
 }
 
 export interface User {
@@ -47,12 +52,19 @@ export interface SolicitacaoFaturamento {
   pedido_id: string;
   numero_pedido: string;
   nome_cliente: string;
-  unidade: string; // Persiste a unidade na solicitação
+  unidade: string;
   volume_solicitado: number;
   status: StatusSolicitacao;
   criado_por: string;
   aprovado_por?: string;
   data_solicitacao: string;
+  motivo_rejeicao?: string;
+  // Flags de aprovação paralela
+  aprovacao_comercial?: boolean;
+  aprovacao_credito?: boolean;
+  // Observações de aprovação
+  obs_comercial?: string;
+  obs_credito?: string;
 }
 
 export interface LogSincronizacao {

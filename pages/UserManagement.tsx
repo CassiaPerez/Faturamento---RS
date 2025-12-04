@@ -15,7 +15,9 @@ import {
   LayoutDashboard,
   ShoppingCart,
   FileText,
-  Edit
+  Edit,
+  TrendingUp,
+  Banknote
 } from 'lucide-react';
 
 // Definição das Regras e Níveis
@@ -34,10 +36,24 @@ const ROLE_DETAILS = {
     color: 'bg-purple-50 text-purple-700 border-purple-200 ring-purple-100',
     icon: LayoutDashboard
   },
+  [Role.COMERCIAL]: {
+    label: 'Diretor Comercial',
+    description: 'Aprovação estratégica de pedidos.',
+    permissions: ['Aprovar Pedidos Comercial', 'Dashboards de Vendas'],
+    color: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-100',
+    icon: TrendingUp
+  },
+  [Role.CREDITO]: {
+    label: 'Analista de Crédito',
+    description: 'Análise de risco e limite.',
+    permissions: ['Liberar Crédito', 'Dashboards Financeiros'],
+    color: 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-indigo-100',
+    icon: Banknote
+  },
   [Role.FATURAMENTO]: {
     label: 'Analista Faturamento',
-    description: 'Operacional de emissão de notas.',
-    permissions: ['Aprovar Solicitações', 'Faturar Pedidos', 'Dashboards Financeiros'],
+    description: 'Triagem e emissão de notas.',
+    permissions: ['Triagem de Pedidos', 'Emissão de Notas', 'Controle Fiscal'],
     color: 'bg-orange-50 text-orange-700 border-orange-200 ring-orange-100',
     icon: FileText
   },
@@ -128,7 +144,7 @@ const UserManagement: React.FC = () => {
             Controle de Acesso
           </h2>
           <p className="text-slate-500 mt-1 max-w-2xl">
-            Gerencie os usuários do sistema e atribua níveis de permissão (Roles) para controlar o acesso aos módulos de Vendas, Faturamento e Gestão.
+            Gerencie os usuários do sistema e atribua níveis de permissão (Roles) para controlar o acesso aos módulos de Vendas, Aprovações e Faturamento.
           </p>
         </div>
         <button 
@@ -168,7 +184,7 @@ const UserManagement: React.FC = () => {
               <Info size={16} />
               <span>Dica de Segurança</span>
             </div>
-            Evite compartilhar senhas. Cada vendedor deve ter seu próprio login para garantir o rastreamento correto das solicitações de faturamento.
+            Certifique-se de atribuir as permissões corretas para os aprovadores (Comercial e Crédito) para evitar gargalos no fluxo de faturamento.
           </div>
         </div>
 
@@ -199,7 +215,7 @@ const UserManagement: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredUsers.map((user) => {
-                  const roleInfo = ROLE_DETAILS[user.role];
+                  const roleInfo = ROLE_DETAILS[user.role] || ROLE_DETAILS[Role.VENDEDOR];
                   const RoleIcon = roleInfo.icon;
                   
                   return (
@@ -266,7 +282,7 @@ const UserManagement: React.FC = () => {
       {/* Modal - Create/Edit User */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div>
@@ -342,20 +358,6 @@ const UserManagement: React.FC = () => {
                         <p className="text-[11px] text-slate-500 mt-1 leading-snug">
                           {details.description}
                         </p>
-                        
-                        <div className="mt-3 pt-3 border-t border-slate-100/50">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Permissões:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {details.permissions.slice(0, 2).map(p => (
-                              <span key={p} className="text-[9px] px-1.5 py-0.5 bg-white rounded border border-slate-100 text-slate-500">
-                                {p}
-                              </span>
-                            ))}
-                            {details.permissions.length > 2 && (
-                              <span className="text-[9px] px-1.5 py-0.5 text-slate-400">+{details.permissions.length - 2}</span>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     );
                   })}

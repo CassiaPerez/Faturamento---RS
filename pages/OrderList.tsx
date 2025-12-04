@@ -13,8 +13,7 @@ import {
   X,
   SlidersHorizontal,
   History,
-  FileCheck,
-  CheckCircle2
+  AlertTriangle
 } from 'lucide-react';
 
 const OrderList: React.FC<{ user: User }> = ({ user }) => {
@@ -62,11 +61,19 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
   const handleCreateRequest = async (pedido: Pedido) => {
     if (!requestVolume) return;
     
+    // Converte virgula para ponto antes de processar
     const sanitizedVolume = requestVolume.replace(',', '.');
     const volNumber = Number(sanitizedVolume);
 
+    console.log(`Tentando criar solicitação: Original="${requestVolume}", Sanitized="${sanitizedVolume}", Number=${volNumber}`);
+
     if (isNaN(volNumber) || volNumber <= 0) {
-      alert("Por favor, insira um volume válido.");
+      alert("Por favor, insira um volume válido maior que zero.");
+      return;
+    }
+
+    if (volNumber > pedido.volume_restante) {
+      alert(`Volume solicitado (${volNumber}) excede o disponível (${pedido.volume_restante})`);
       return;
     }
 
@@ -299,6 +306,7 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                     <Briefcase size={14} className="text-slate-400" />
                     <span className="truncate">{p.codigo_cliente}</span>
                   </div>
+                  {/* VENDEDOR VISIVEL NO CARD */}
                   <div className="mt-2.5 flex items-center">
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200/80 text-xs group-hover:border-slate-300 transition-colors">
                       <UserIcon size={12} className="text-slate-400" />
@@ -377,38 +385,60 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
                           <History size={16} className="text-slate-400" />
-                          <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Histórico de Solicitações</span>
+                          <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Histórico de Faturamento / Solicitações</span>
                         </div>
                         
                         {isLoadingHistory ? (
                           <div className="p-6 text-center text-xs text-slate-400 italic">Carregando histórico...</div>
                         ) : orderSolicitacoes.length > 0 ? (
-                          <div className="max-h-[150px] overflow-y-auto">
+                          <div className="max-h-[250px] overflow-y-auto">
                             <table className="w-full text-xs text-left">
                               <thead className="text-slate-400 font-medium bg-slate-50 sticky top-0">
                                 <tr>
                                   <th className="px-4 py-2">Data</th>
                                   <th className="px-4 py-2">Volume</th>
+                                  <th className="px-4 py-2">Valor (Est.)</th>
                                   <th className="px-4 py-2">Status</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {orderSolicitacoes.map(sol => (
-                                  <tr key={sol.id} className="hover:bg-slate-50">
-                                    <td className="px-4 py-2 text-slate-600">{new Date(sol.data_solicitacao).toLocaleDateString()}</td>
-                                    <td className="px-4 py-2 font-bold text-slate-700">{sol.volume_solicitado} {sol.unidade}</td>
-                                    <td className="px-4 py-2">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                                        sol.status === StatusSolicitacao.FATURADO ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                        sol.status === StatusSolicitacao.APROVADO ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                        sol.status === StatusSolicitacao.REJEITADO ? 'bg-red-50 text-red-700 border-red-100' :
-                                        'bg-orange-50 text-orange-700 border-orange-100'
-                                      }`}>
-                                        {sol.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
+                                {orderSolicitacoes.map(sol => {
+                                  // Calcula valor proporcional do item faturado
+                                  const valorUnitario = p.valor_total / p.volume_total;
+                                  const valorFaturado = sol.volume_solicitado * valorUnitario;
+
+                                  return (
+                                    <tr key={sol.id} className="hover:bg-slate-50 group">
+                                      <td className="px-4 py-3 text-slate-600">
+                                        {new Date(sol.data_solicitacao).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-3 font-bold text-slate-700">
+                                        {sol.volume_solicitado.toLocaleString('pt-BR')} {sol.unidade}
+                                      </td>
+                                      <td className="px-4 py-3 font-mono text-slate-600">
+                                        R$ {valorFaturado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div className="flex flex-col items-start gap-1">
+                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                                            sol.status === StatusSolicitacao.FATURADO ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                            sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                            sol.status === StatusSolicitacao.REJEITADO ? 'bg-red-50 text-red-700 border-red-100' :
+                                            'bg-orange-50 text-orange-700 border-orange-100'
+                                          }`}>
+                                            {sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'Aprovado' : sol.status}
+                                          </span>
+                                          {sol.status === StatusSolicitacao.REJEITADO && sol.motivo_rejeicao && (
+                                            <span className="text-[10px] text-red-600 font-medium flex items-center gap-1 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[180px] break-words leading-tight">
+                                              <AlertTriangle size={10} className="shrink-0" />
+                                              {sol.motivo_rejeicao}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

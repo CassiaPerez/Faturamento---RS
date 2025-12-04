@@ -4,30 +4,35 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import OrderList from './pages/OrderList';
 import BillingPanel from './pages/BillingPanel';
+import CommercialPanel from './pages/CommercialPanel';
+import CreditPanel from './pages/CreditPanel';
 import SyncManager from './pages/SyncManager';
 import UserManagement from './pages/UserManagement';
+import LoginPage from './pages/LoginPage';
 import GeminiChat from './components/GeminiChat';
-import { User, Role } from './types';
-import { MOCK_USERS } from './services/dataService';
+import { User } from './types';
+import { api } from './services/dataService';
 
 const App: React.FC = () => {
-  // Default to Admin for demo ease, but allows switching
-  const [currentUser, setCurrentUser] = useState<User>(MOCK_USERS[0]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
 
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    setCurrentView('dashboard');
+  };
+
   const handleSwitchUser = (userId: string) => {
-    // Note: We'll fetch the full list in real implementation, 
-    // for now we trust the layout/mock data structure has been updated by dataService fallback
-    // In a real app, this would be an API call or context lookup
-    import('./services/dataService').then(module => {
-      module.api.getUsers().then(users => {
-        const user = users.find(u => u.id === userId);
-        if (user) setCurrentUser(user);
-      });
+    // Allows switching for testing purposes inside the app
+    api.getUsers().then(users => {
+      const user = users.find(u => u.id === userId);
+      if (user) setCurrentUser(user);
     });
   };
 
   const renderContent = () => {
+    if (!currentUser) return null;
+
     switch (currentView) {
       case 'dashboard':
         return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
@@ -35,6 +40,10 @@ const App: React.FC = () => {
         return <OrderList user={currentUser} />;
       case 'billing':
         return <BillingPanel user={currentUser} />;
+      case 'commercial':
+        return <CommercialPanel user={currentUser} />;
+      case 'credit':
+        return <CreditPanel user={currentUser} />;
       case 'sync':
         return <SyncManager />;
       case 'users':
@@ -43,6 +52,10 @@ const App: React.FC = () => {
         return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
     }
   };
+
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-900 font-sans">
