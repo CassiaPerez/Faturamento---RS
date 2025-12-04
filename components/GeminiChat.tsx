@@ -17,7 +17,7 @@ const GeminiChat: React.FC = () => {
       chatSession.current = createChatSession();
       setMessages([{
         role: 'model',
-        text: 'Olá! Sou seu assistente virtual Cropfield. Como posso ajudar com seus pedidos ou relatórios hoje?',
+        text: 'Olá! Sou seu assistente virtual Cropflow. Como posso ajudar com seus pedidos ou relatórios hoje?',
         timestamp: new Date()
       }]);
     }
@@ -54,7 +54,7 @@ const GeminiChat: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[400px] h-[600px] flex flex-col mb-4 transition-all animate-scale-in overflow-hidden">
           
           {/* Header */}
-          <div className="bg-gradient-to-r from-brand-600 to-indigo-700 text-white p-4 flex justify-between items-center shadow-md relative overflow-hidden">
+          <div className="bg-gradient-to-r from-crop-600 to-emerald-700 text-white p-4 flex justify-between items-center shadow-md relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Sparkles size={80} />
             </div>
@@ -64,9 +64,9 @@ const GeminiChat: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold flex items-center gap-2 text-sm">
-                  Cropfield AI
+                  Cropflow AI
                 </h3>
-                <p className="text-[10px] text-blue-100 opacity-90 font-medium">Gemini 3 Pro Powered</p>
+                <p className="text-[10px] text-emerald-100 opacity-90 font-medium">Gemini 3 Pro Powered</p>
               </div>
             </div>
             <button 
@@ -83,7 +83,7 @@ const GeminiChat: React.FC = () => {
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl p-3.5 text-sm shadow-sm leading-relaxed ${
                   msg.role === 'user' 
-                    ? 'bg-brand-600 text-white rounded-br-none' 
+                    ? 'bg-crop-600 text-white rounded-br-none' 
                     : 'bg-white text-slate-700 border border-slate-100 rounded-bl-none'
                 }`}>
                   {msg.text}
@@ -93,9 +93,9 @@ const GeminiChat: React.FC = () => {
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-white border border-slate-100 rounded-2xl p-4 rounded-bl-none flex items-center gap-1.5 shadow-sm">
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce delay-75"></div>
-                  <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce delay-150"></div>
+                  <div className="w-1.5 h-1.5 bg-crop-400 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-crop-400 rounded-full animate-bounce delay-75"></div>
+                  <div className="w-1.5 h-1.5 bg-crop-400 rounded-full animate-bounce delay-150"></div>
                 </div>
               </div>
             )}
@@ -104,7 +104,7 @@ const GeminiChat: React.FC = () => {
 
           {/* Input */}
           <div className="p-4 bg-white border-t border-slate-100">
-            <div className="flex gap-2 items-center bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus-within:ring-2 focus-within:ring-brand-100 focus-within:border-brand-300 transition-all">
+            <div className="flex gap-2 items-center bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus-within:ring-2 focus-within:ring-crop-100 focus-within:border-crop-300 transition-all">
               <input
                 type="text"
                 value={inputValue}
@@ -117,7 +117,7 @@ const GeminiChat: React.FC = () => {
               <button 
                 onClick={handleSend}
                 disabled={!inputValue.trim() || isLoading}
-                className="bg-brand-600 text-white p-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                className="bg-crop-600 text-white p-2 rounded-lg hover:bg-crop-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <Send size={16} />
               </button>
@@ -129,7 +129,7 @@ const GeminiChat: React.FC = () => {
 
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-brand-600 hover:bg-brand-700 text-white rounded-full w-14 h-14 shadow-xl shadow-brand-900/30 transition-transform hover:scale-110 active:scale-95 flex items-center justify-center group"
+        className="bg-crop-600 hover:bg-crop-700 text-white rounded-full w-14 h-14 shadow-xl shadow-crop-900/30 transition-transform hover:scale-110 active:scale-95 flex items-center justify-center group"
       >
         {isOpen ? (
           <X size={24} />

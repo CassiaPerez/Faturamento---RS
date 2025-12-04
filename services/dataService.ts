@@ -1,4 +1,3 @@
-
 import { Pedido, SolicitacaoFaturamento, LogSincronizacao, StatusPedido, StatusSolicitacao, Role, User } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -34,12 +33,12 @@ let localLogs: LogSincronizacao[] = [];
 
 export const MOCK_USERS: User[] = [
   { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: 'administrador@grupocropfield.com.br' },
-  { id: 'u2', name: 'Gerente Comercial', role: Role.GERENTE, email: 'gerente@cropfield.com' },
-  { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropfield.com' },
-  { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropfield.com' },
-  { id: 'u7', name: 'Analista Crédito', role: Role.CREDITO, email: 'credito@cropfield.com' },
-  { id: 'u4', name: 'A. J. DEBONI & CIA LTDA', role: Role.VENDEDOR, email: 'deboni@cropfield.com' },
-  { id: 'u5', name: 'DANTE LUIS DAMIANI', role: Role.VENDEDOR, email: 'dante@cropfield.com' },
+  { id: 'u2', name: 'Gerente Comercial', role: Role.GERENTE, email: 'gerente@cropflow.com' },
+  { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropflow.com' },
+  { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropflow.com' },
+  { id: 'u7', name: 'Analista Crédito', role: Role.CREDITO, email: 'credito@cropflow.com' },
+  { id: 'u4', name: 'A. J. DEBONI & CIA LTDA', role: Role.VENDEDOR, email: 'deboni@cropflow.com' },
+  { id: 'u5', name: 'DANTE LUIS DAMIANI', role: Role.VENDEDOR, email: 'dante@cropflow.com' },
 ];
 
 let localUsers: User[] = [...MOCK_USERS];
@@ -513,6 +512,9 @@ export const api = {
             const st = restored >= pedido.volume_total ? StatusPedido.PENDENTE : StatusPedido.PARCIALMENTE_FATURADO;
             await supabase.from('pedidos').update({ volume_restante: restored, status: st }).eq('id', pedido.id);
           }
+          
+          // DISPARAR NOTIFICAÇÃO
+          sendRejectionNotification(sol, formattedReason || "Motivo não informado", user);
         }
         return;
       }
@@ -538,6 +540,8 @@ export const api = {
              localPedidos[pIdx].volume_restante = restored;
              localPedidos[pIdx].status = restored >= p.volume_total ? StatusPedido.PENDENTE : StatusPedido.PARCIALMENTE_FATURADO;
            }
+           // DISPARAR NOTIFICAÇÃO (Fallback)
+           sendRejectionNotification(localSolicitacoes[idx], formattedReason || "Motivo não informado", user);
         }
       }
     }
@@ -623,4 +627,41 @@ export const api = {
       return logData as any;
     }
   }
+};
+
+// Função auxiliar para simular envio de e-mail
+const sendRejectionNotification = async (solicitacao: SolicitacaoFaturamento, motivo: string, quemRejeitou: User) => {
+  // 1. Encontrar e-mails dos Gerentes
+  const gerentes = localUsers.filter(u => u.role === Role.GERENTE);
+  const emailsGerentes = gerentes.map(g => g.email);
+
+  // 2. Encontrar e-mail do Vendedor
+  // Tenta achar o usuário pelo nome gravado em 'criado_por' ou pelo codigo_vendedor se disponível
+  const vendedor = localUsers.find(u => u.name === solicitacao.criado_por || u.role === Role.VENDEDOR); 
+  const emailVendedor = vendedor ? vendedor.email : 'vendedor@cropflow.com';
+
+  const destinatarios = [...emailsGerentes, emailVendedor].join(', ');
+
+  const emailSubject = `🚫 BLOQUEIO: Pedido ${solicitacao.numero_pedido} - ${solicitacao.nome_cliente}`;
+  const emailBody = `
+    Olá,
+    
+    A solicitação de faturamento para o pedido ${solicitacao.numero_pedido} foi BLOQUEADA/REJEITADA.
+    
+    Cliente: ${solicitacao.nome_cliente}
+    Volume: ${solicitacao.volume_solicitado} ${solicitacao.unidade}
+    
+    Bloqueado por: ${quemRejeitou.name} (${getRoleLabel(quemRejeitou.role)})
+    Motivo: ${motivo}
+    
+    Acesse o sistema para regularizar ou cancelar a solicitação.
+  `;
+
+  // SIMULAÇÃO DO ENVIO (Aqui entraria a chamada para API de E-mail real: Resend/SendGrid)
+  console.group('📧 DISPARO DE E-MAIL AUTOMÁTICO');
+  console.log(`DE: sistema@cropflow.com`);
+  console.log(`PARA: ${destinatarios}`);
+  console.log(`ASSUNTO: ${emailSubject}`);
+  console.log(`CORPO: \n${emailBody}`);
+  console.groupEnd();
 };

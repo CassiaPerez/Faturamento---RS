@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { User, Role } from '../types';
 import { api } from '../services/dataService';
@@ -54,7 +53,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
               <Sprout size={20} />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white leading-none">CROPFIELD</h1>
+              <h1 className="text-lg font-bold tracking-tight text-white leading-none">CROPFLOW</h1>
               <p className="text-[10px] text-slate-400 tracking-wide uppercase font-medium mt-0.5">Faturamento RS</p>
             </div>
           </div>

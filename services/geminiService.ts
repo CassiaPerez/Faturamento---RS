@@ -8,7 +8,7 @@ export const createChatSession = () => {
   return ai.chats.create({
     model: 'gemini-3-pro-preview',
     config: {
-      systemInstruction: 'Você é um assistente IA especializado no sistema Cropfield - Faturamento RS. Ajude com dúvidas sobre pedidos, faturamento e status de sincronização. Responda de forma profissional e direta.',
+      systemInstruction: 'Você é um assistente IA especializado no sistema Cropflow - Faturamento RS. Ajude com dúvidas sobre pedidos, faturamento e status de sincronização. Responda de forma profissional e direta.',
     },
   });
 };

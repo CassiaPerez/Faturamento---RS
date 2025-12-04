@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { api } from '../services/dataService';
 import { User } from '../types';
@@ -37,7 +36,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <div className="w-16 h-16 bg-crop-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-crop-900/20 mb-4">
           <Sprout size={36} />
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">CROPFIELD</h1>
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">CROPFLOW</h1>
         <p className="text-slate-500 font-medium tracking-wide uppercase text-xs mt-1">Faturamento RS • Portal Corporativo</p>
       </div>
 
@@ -107,7 +106,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         
         <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
           <p className="text-xs text-slate-400">
-            &copy; {new Date().getFullYear()} Grupo Cropfield. Todos os direitos reservados.
+            &copy; {new Date().getFullYear()} Grupo Cropflow. Todos os direitos reservados.
           </p>
         </div>
       </div>
