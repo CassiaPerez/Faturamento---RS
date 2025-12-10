@@ -2,10 +2,12 @@
 
 
 
+
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare } from 'lucide-react';
+import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare, Calendar } from 'lucide-react';
 
 const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -192,6 +194,24 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                        <div className="text-[10px] text-amber-800">
                            <span className="font-bold">Nota do Vendedor:</span> {sol.obs_vendedor}
                        </div>
+                   </div>
+               )}
+
+               {/* Exibir Observações do Faturamento/Envio */}
+               {(sol.prazo_pedido || sol.obs_faturamento) && (
+                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2 space-y-1">
+                      {sol.prazo_pedido && (
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                            <Calendar size={12} className="text-slate-400" />
+                            <span className="font-bold uppercase">Prazo:</span> {sol.prazo_pedido}
+                         </div>
+                      )}
+                      {sol.obs_faturamento && (
+                         <div className="flex items-start gap-1.5 text-[10px] text-slate-600">
+                            <MessageSquare size={12} className="text-slate-400 mt-0.5" />
+                            <div><span className="font-bold uppercase">Obs. Fat:</span> {sol.obs_faturamento}</div>
+                         </div>
+                      )}
                    </div>
                )}
 
