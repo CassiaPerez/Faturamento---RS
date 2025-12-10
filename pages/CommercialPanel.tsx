@@ -1,8 +1,11 @@
 
+
+
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, TrendingUp, CalendarDays, User as UserIcon, AlertTriangle, Eye, Search, X, MessageSquarePlus } from 'lucide-react';
+import { CheckCircle2, XCircle, TrendingUp, CalendarDays, User as UserIcon, AlertTriangle, Eye, Search, X, MessageSquarePlus, Unlock, Lock, Ban, RefreshCcw, MessageSquare } from 'lucide-react';
 
 const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -17,6 +20,11 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [approveId, setApproveId] = useState<string | null>(null);
   const [approvalObservation, setApprovalObservation] = useState('');
+
+  // Unblock Modal
+  const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
+  const [unblockId, setUnblockId] = useState<string | null>(null);
+  const [unblockReason, setUnblockReason] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -58,16 +66,37 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
 
   const handleConfirmRejection = async () => {
     if (!rejectId || !rejectReason.trim()) return;
-    await api.updateSolicitacaoStatus(rejectId, StatusSolicitacao.REJEITADO, user, rejectReason);
+    // Passa Role.COMERCIAL explicitamente para garantir que o bloqueio seja atribuído ao setor correto
+    await api.updateSolicitacaoStatus(rejectId, StatusSolicitacao.REJEITADO, user, rejectReason, Role.COMERCIAL);
     const formattedReason = `[BLOQUEIO: COMERCIAL] ${rejectReason}`;
-    setSolicitacoes(prev => prev.map(s => s.id === rejectId ? { ...s, status: StatusSolicitacao.REJEITADO, motivo_rejeicao: formattedReason } : s));
+    setSolicitacoes(prev => prev.map(s => s.id === rejectId ? { ...s, status: StatusSolicitacao.REJEITADO, motivo_rejeicao: formattedReason, blocked_by: Role.COMERCIAL } : s));
     setIsRejectModalOpen(false);
     setRejectId(null);
   };
 
-  // Logica de Filtro: Status deve ser EM_ANALISE e minha flag deve ser false
+  const openUnblockModal = (id: string) => {
+    setUnblockId(id);
+    setUnblockReason('');
+    setIsUnblockModalOpen(true);
+  };
+
+  const handleConfirmUnblock = async () => {
+    if (!unblockId || !unblockReason.trim()) return;
+    try {
+      await api.unblockSolicitacao(unblockId, user); 
+      const updated = await api.getSolicitacoes(user);
+      setSolicitacoes(updated);
+      setIsUnblockModalOpen(false);
+      setUnblockId(null);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  // Lógica Paralela: Mostra tudo que está em análise e que EU ainda não aprovei.
+  // Não importa se o crédito já aprovou ou não.
   const pendingList = solicitacoes.filter(s => 
-    (s.status === StatusSolicitacao.EM_ANALISE || s.status === StatusSolicitacao.EM_ANALISE_COMERCIAL) 
+    (s.status === StatusSolicitacao.EM_ANALISE) 
     && !s.aprovacao_comercial
   );
   
@@ -79,6 +108,29 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
     s.numero_pedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.criado_por.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Regra Estrita: Só pode desbloquear se for Admin ou se foi o Comercial que bloqueou
+  const canUnblock = (sol: SolicitacaoFaturamento) => {
+     return user.role === Role.ADMIN || sol.blocked_by === Role.COMERCIAL;
+  };
+
+  const getBlockerColor = (role?: Role) => {
+    switch (role) {
+      case Role.CREDITO: return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case Role.COMERCIAL: return 'bg-blue-100 text-blue-800 border-blue-200';
+      case Role.FATURAMENTO: return 'bg-orange-100 text-orange-800 border-orange-200';
+      default: return 'bg-red-50 text-red-700 border-red-100';
+    }
+  };
+
+  const getBlockerLabel = (role?: Role) => {
+    switch (role) {
+      case Role.CREDITO: return 'SETOR CRÉDITO';
+      case Role.COMERCIAL: return 'SETOR COMERCIAL';
+      case Role.FATURAMENTO: return 'SETOR FATURAMENTO';
+      default: return 'BLOQUEADO';
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -107,37 +159,104 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
            <div key={sol.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
              <div className="p-5 border-b border-slate-100 bg-gradient-to-b from-blue-50/50 to-white flex justify-between items-start">
                <div><span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span><h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>{sol.nome_cliente}</h4></div>
-               {activeTab === 'rejected' && (<span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded-full border border-red-200">REJEITADO</span>)}
+               {activeTab === 'rejected' && (<span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded-full border border-red-200 flex items-center gap-1"><Lock size={10} /> BLOQUEADO</span>)}
              </div>
              <div className="p-5 flex-1 space-y-4">
+               {/* Exibir Produto */}
+               <div className="mb-2 pb-2 border-b border-slate-50">
+                   <p className="text-[10px] text-slate-400 font-bold uppercase">Produto</p>
+                   <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
+               </div>
                <div><p className="text-xs text-slate-500 font-semibold uppercase">Volume</p><p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p></div>
-               {activeTab === 'rejected' && sol.motivo_rejeicao && (<div className="bg-red-50 p-3 rounded-lg border border-red-100"><p className="text-[10px] font-bold text-red-800 uppercase tracking-wide mb-1 flex items-center gap-1"><AlertTriangle size={10} /> Motivo / Origem</p><p className="text-xs text-red-700 leading-relaxed font-medium break-words">{sol.motivo_rejeicao}</p></div>)}
-               <div className="space-y-2 pt-2 border-t border-slate-50"><div className="flex items-center text-xs text-slate-500"><UserIcon size={12} className="mr-2 text-slate-400" /> Solicitante: <span className="font-medium text-slate-700 ml-1">{sol.criado_por}</span></div><div className="flex items-center text-xs text-slate-500"><CalendarDays size={12} className="mr-2 text-slate-400" /> Data: <span className="font-medium text-slate-700 ml-1">{new Date(sol.data_solicitacao).toLocaleDateString()}</span></div></div>
+               
+               {/* Mostrar observação do crédito se houver */}
+               {sol.obs_credito && (
+                   <div className="flex items-start gap-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100">
+                       <MessageSquare size={12} className="text-indigo-600 mt-0.5 shrink-0" />
+                       <div className="text-[10px] text-indigo-800">
+                           <span className="font-bold">Crédito:</span> {sol.obs_credito}
+                       </div>
+                   </div>
+               )}
+               {/* Status de Aprovação do Crédito */}
+               {sol.aprovacao_credito && (
+                   <div className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold uppercase bg-emerald-50 px-2 py-1 rounded w-fit">
+                       <CheckCircle2 size={10} /> Crédito Aprovado
+                   </div>
+               )}
+
+               {/* Exibir Obs Vendedor */}
+               {sol.obs_vendedor && (
+                   <div className="flex items-start gap-2 bg-amber-50 p-2 rounded-lg border border-amber-100 mt-2">
+                       <MessageSquare size={12} className="text-amber-600 mt-0.5 shrink-0" />
+                       <div className="text-[10px] text-amber-800">
+                           <span className="font-bold">Nota do Vendedor:</span> {sol.obs_vendedor}
+                       </div>
+                   </div>
+               )}
+
+               {activeTab === 'pending' && (
+                   <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
+                       <TrendingUp size={16} className="text-blue-500 mt-0.5" />
+                       <div>
+                           <p className="text-xs font-bold text-blue-800">Verificar Rentabilidade</p>
+                           <p className="text-[10px] text-blue-700 leading-tight mt-0.5">Analise a margem de contribuição deste pedido.</p>
+                       </div>
+                   </div>
+               )}
+
+               {activeTab === 'rejected' && sol.motivo_rejeicao && (
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                     <div className="flex items-center justify-between mb-1">
+                       <p className="text-[10px] font-bold text-red-800 uppercase tracking-wide flex items-center gap-1"><Lock size={10} /> Motivo do Bloqueio</p>
+                       {sol.blocked_by && (
+                         <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase flex items-center gap-1 ${getBlockerColor(sol.blocked_by as Role)}`}>
+                           <Ban size={8} /> {getBlockerLabel(sol.blocked_by as Role)}
+                         </span>
+                       )}
+                    </div>
+                     <p className="text-xs text-red-700 leading-relaxed font-medium break-words">{sol.motivo_rejeicao.replace(/\[.*?\]\s*/, '')}</p>
+                     {sol.blocked_by && sol.blocked_by !== Role.COMERCIAL && (
+                        <p className="text-[10px] text-red-500 mt-2 border-t border-red-100 pt-1 italic flex items-center gap-1">
+                           <Lock size={8} /> Bloqueado por: {sol.blocked_by}
+                        </p>
+                    )}
+                  </div>
+               )}
+               <div className="space-y-2 pt-2 border-t border-slate-50"><div className="flex items-center text-xs text-slate-500"><CalendarDays size={12} className="mr-2 text-slate-400" /> Data: <span className="font-medium text-slate-700 ml-1">{new Date(sol.data_solicitacao).toLocaleDateString()}</span></div></div>
              </div>
              {activeTab === 'pending' && (
                <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                 <button onClick={() => openRejectModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"><XCircle size={14} /> Rejeitar</button>
-                 <button onClick={() => openApproveModal(sol.id)} className="flex-[2] px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"><CheckCircle2 size={14} /> Aprovar</button>
+                 <button onClick={() => openRejectModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"><XCircle size={14} /> Bloquear</button>
+                 <button onClick={() => openApproveModal(sol.id)} className="flex-[2] px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"><CheckCircle2 size={14} /> Aprovar Comercial</button>
                </div>
              )}
-             {activeTab === 'rejected' && (<div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center"><span className="text-xs text-slate-400 font-medium flex items-center gap-1"><Eye size={12} /> Acompanhando status</span></div>)}
+             {activeTab === 'rejected' && (
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
+                  {canUnblock(sol) ? (
+                    <button onClick={() => openUnblockModal(sol.id)} className="w-full px-4 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"><Unlock size={14} /> Reconsiderar / Desbloquear</button>
+                  ) : (
+                    <span className="text-xs text-slate-400 font-medium flex items-center gap-1"><Eye size={12} /> Somente leitura (Bloqueio Externo)</span>
+                  )}
+                </div>
+             )}
            </div>
          ))}
        </div>
-       {filteredList.length === 0 && (<div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-slate-300"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">{searchTerm ? <Search size={32} className="text-slate-300" /> : <TrendingUp size={32} className="text-slate-300" />}</div><p className="text-slate-500 font-medium">{searchTerm ? 'Nenhum resultado para esta busca.' : (activeTab === 'pending' ? 'Nenhuma pendência comercial.' : 'Nenhum item rejeitado recentemente.')}</p></div>)}
+       {filteredList.length === 0 && (<div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-slate-300"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">{searchTerm ? <Search size={32} className="text-slate-300" /> : <TrendingUp size={32} className="text-slate-300" />}</div><p className="text-slate-500 font-medium">{searchTerm ? 'Nenhum resultado para esta busca.' : (activeTab === 'pending' ? 'Nenhuma pendência comercial.' : 'Nenhum bloqueio recente.')}</p></div>)}
        
-       {/* Modal de Rejeição */}
+       {/* Modal de Rejeição/Bloqueio */}
        {isRejectModalOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-             <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-red-50/50"><div className="p-2 bg-red-100 rounded-full text-red-600"><AlertTriangle size={24} /></div><h3 className="text-lg font-bold text-slate-800">Rejeitar Solicitação</h3></div>
-             <div className="p-6 space-y-4"><p className="text-sm text-slate-600">Informe o motivo da rejeição comercial.</p><textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Ex: Margem abaixo do permitido..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm min-h-[100px]" autoFocus /></div>
-             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3"><button onClick={() => setIsRejectModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button><button onClick={handleConfirmRejection} disabled={!rejectReason.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar Rejeição</button></div>
+             <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-red-50/50"><div className="p-2 bg-red-100 rounded-full text-red-600"><AlertTriangle size={24} /></div><h3 className="text-lg font-bold text-slate-800">Bloquear Solicitação</h3></div>
+             <div className="p-6 space-y-4"><p className="text-sm text-slate-600">Por favor, informe o motivo do bloqueio comercial.</p><textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Motivo (ex: Margem baixa, política de preços...)" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm min-h-[100px]" autoFocus /></div>
+             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3"><button onClick={() => setIsRejectModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button><button onClick={handleConfirmRejection} disabled={!rejectReason.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar Bloqueio</button></div>
            </div>
          </div>
        )}
 
-       {/* Modal de Aprovação */}
+       {/* Modal de Aprovação com Observação */}
        {isApproveModalOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -152,7 +271,7 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
                  <textarea 
                    value={approvalObservation} 
                    onChange={(e) => setApprovalObservation(e.target.value)} 
-                   placeholder="Ex: Condição especial aprovada..." 
+                   placeholder="Ex: Preço aprovado com condição especial..." 
                    className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm min-h-[100px]" 
                    autoFocus 
                  />
@@ -160,8 +279,19 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
              </div>
              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
                <button onClick={() => setIsApproveModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
-               <button onClick={handleConfirmApproval} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all text-sm">Confirmar</button>
+               <button onClick={handleConfirmApproval} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all text-sm">Confirmar Aprovação</button>
              </div>
+           </div>
+         </div>
+       )}
+
+       {/* Modal de Desbloqueio */}
+       {isUnblockModalOpen && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-amber-50/50"><div className="p-2 bg-amber-100 rounded-full text-amber-600"><RefreshCcw size={24} /></div><h3 className="text-lg font-bold text-slate-800">Desbloquear / Reiniciar</h3></div>
+             <div className="p-6 space-y-4"><p className="text-sm text-slate-600">Justifique o desbloqueio para reiniciar o processo.</p><textarea value={unblockReason} onChange={(e) => setUnblockReason(e.target.value)} placeholder="Ex: Correção realizada..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none text-sm min-h-[100px]" autoFocus /></div>
+             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3"><button onClick={() => setIsUnblockModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button><button onClick={handleConfirmUnblock} disabled={!unblockReason.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar</button></div>
            </div>
          </div>
        )}

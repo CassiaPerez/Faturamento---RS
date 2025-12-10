@@ -13,7 +13,10 @@ import {
   Sprout,
   Users,
   TrendingUp,
-  Banknote
+  Banknote,
+  Settings,
+  Menu,
+  X
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -26,11 +29,12 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, currentView, onNavigate }) => {
   const [usersList, setUsersList] = useState<User[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     // Fetch users for the switcher (keeps dropdown in sync)
     api.getUsers().then(setUsersList);
-  }, [currentView]); // Update when view changes in case user was added
+  }, [currentView]);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [Role.ADMIN, Role.GERENTE, Role.VENDEDOR, Role.FATURAMENTO, Role.COMERCIAL, Role.CREDITO] },
@@ -40,14 +44,32 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
     { id: 'credit', label: 'Análise de Crédito', icon: Banknote, roles: [Role.ADMIN, Role.GERENTE, Role.CREDITO] },
     { id: 'sync', label: 'Sincronização', icon: RefreshCw, roles: [Role.ADMIN, Role.GERENTE] },
     { id: 'users', label: 'Usuários', icon: Users, roles: [Role.ADMIN] },
+    { id: 'settings', label: 'Configurações', icon: Settings, roles: [Role.ADMIN] },
   ];
+
+  const handleNavigate = (id: string) => {
+    onNavigate(id);
+    setIsMobileMenuOpen(false); // Close menu on mobile after click
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-30 lg:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-72 bg-[#0f172a] text-white flex flex-col shadow-xl z-20 transition-all duration-300">
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-40 w-72 bg-[#0f172a] text-white flex flex-col shadow-xl transition-transform duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
         {/* Brand */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-[#020617]">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-[#020617]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-crop-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-crop-900/50">
               <Sprout size={20} />
@@ -57,6 +79,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
               <p className="text-[10px] text-slate-400 tracking-wide uppercase font-medium mt-0.5">Gestão Inteligente</p>
             </div>
           </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
+            <X size={20} />
+          </button>
         </div>
 
         {/* Navigation */}
@@ -69,7 +94,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigate(item.id)}
+                onClick={() => handleNavigate(item.id)}
                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${
                   isActive 
                     ? 'bg-crop-600 text-white shadow-md shadow-crop-900/30' 
@@ -118,16 +143,22 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
         
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shadow-sm z-10">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-slate-800 capitalize flex items-center gap-3">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <Menu size={24} />
+            </button>
+            <h2 className="text-lg md:text-xl font-bold text-slate-800 capitalize flex items-center gap-3 truncate">
               {menuItems.find(i => i.id === currentView)?.label}
             </h2>
           </div>
 
-          <div className="flex items-center gap-6">
-            {/* Search Bar (Mock) */}
-            <div className="hidden lg:flex items-center bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-crop-100 focus-within:border-crop-400 transition-all w-64 group">
+          <div className="flex items-center gap-3 md:gap-6">
+            {/* Search Bar (Hidden on Mobile) */}
+            <div className="hidden md:flex items-center bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-crop-100 focus-within:border-crop-400 transition-all w-64 group">
               <Search size={16} className="text-slate-400 group-focus-within:text-crop-500 transition-colors" />
               <input 
                 type="text" 
@@ -136,8 +167,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
               />
             </div>
 
-            {/* Sync Status Badge */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 text-[10px] font-bold uppercase tracking-wide">
+            {/* Sync Status Badge (Hidden on Small Mobile) */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 text-[10px] font-bold uppercase tracking-wide">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -145,7 +176,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
               Sync Ativo
             </div>
 
-            <div className="h-6 w-px bg-slate-200 mx-2"></div>
+            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
 
             <button className="relative p-2 text-slate-400 hover:text-crop-600 hover:bg-slate-50 rounded-lg transition-all">
               <Bell size={20} />
@@ -155,7 +186,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
         </header>
 
         {/* Content Scroll Area */}
-        <main className="flex-1 overflow-auto p-8 scroll-smooth">
+        <main className="flex-1 overflow-auto p-4 md:p-8 scroll-smooth">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>

@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cropflow - Faturamento RS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS via CDN para garantir renderização sem build step -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
@@ -14,9 +16,9 @@
               sans: ['Inter', 'sans-serif'],
             },
             colors: {
-              primary: '#0f172a', // Slate 900
-              secondary: '#334155', // Slate 700
-              accent: '#2563eb', // Blue 600
+              primary: '#0f172a',
+              secondary: '#334155',
+              accent: '#2563eb',
               brand: {
                 50: '#eff6ff',
                 100: '#dbeafe',
@@ -25,7 +27,6 @@
                 700: '#1d4ed8',
                 900: '#1e3a8a',
               },
-              // Paleta Verde Agro (Cropflow)
               crop: {
                 50: '#f0fdf4',
                 100: '#dcfce7',
@@ -33,7 +34,7 @@
                 300: '#86efac',
                 400: '#4ade80',
                 500: '#22c55e',
-                600: '#16a34a', // Verde Principal
+                600: '#16a34a',
                 700: '#15803d',
                 800: '#166534',
                 900: '#14532d',
@@ -43,44 +44,37 @@
         }
       }
     </script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+        "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.2",
+        "vite": "https://aistudiocdn.com/vite@^7.2.7",
+        "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.2",
+        "path": "https://aistudiocdn.com/path@^0.12.7",
+        "react/": "https://aistudiocdn.com/react@^19.2.1/",
+        "react": "https://aistudiocdn.com/react@^19.2.1",
+        "url": "https://aistudiocdn.com/url@^0.11.4"
+      }
+    }
+    </script>
     <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f8fafc;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
-      }
+      /* Fallback crítico para esconder conteúdo até o CSS carregar */
+      body { visibility: hidden; } 
+      body.loaded { visibility: visible; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.2",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
-  }
-}
-</script>
-</head>
-  <body>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
+    <script>
+      // Mostra o corpo apenas quando o DOM estiver pronto para evitar FOUC
+      window.addEventListener('DOMContentLoaded', () => {
+        document.body.classList.add('loaded');
+      });
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

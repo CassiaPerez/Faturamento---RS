@@ -51,7 +51,7 @@ const GeminiChat: React.FC = () => {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
       {isOpen && (
-        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[400px] h-[600px] flex flex-col mb-4 transition-all animate-scale-in overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[90vw] sm:w-[400px] h-[80vh] sm:h-[600px] flex flex-col mb-4 transition-all animate-scale-in overflow-hidden">
           
           {/* Header */}
           <div className="bg-gradient-to-r from-crop-600 to-emerald-700 text-white p-4 flex justify-between items-center shadow-md relative overflow-hidden">

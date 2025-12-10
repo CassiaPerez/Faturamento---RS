@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -8,6 +7,7 @@ import CommercialPanel from './pages/CommercialPanel';
 import CreditPanel from './pages/CreditPanel';
 import SyncManager from './pages/SyncManager';
 import UserManagement from './pages/UserManagement';
+import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import GeminiChat from './components/GeminiChat';
 import { User } from './types';
@@ -48,6 +48,8 @@ const App: React.FC = () => {
         return <SyncManager />;
       case 'users':
         return <UserManagement />;
+      case 'settings':
+        return <SettingsPage user={currentUser} />;
       default:
         return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
     }

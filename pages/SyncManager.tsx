@@ -25,6 +25,9 @@ const SyncManager: React.FC = () => {
     try {
       await api.triggerManualSync();
       await fetchLogs();
+    } catch (e: any) {
+      console.error(e);
+      alert(`Falha na sincronização: ${e.message || "Erro desconhecido ao conectar com Drive"}`);
     } finally {
       setIsSyncing(false);
     }
