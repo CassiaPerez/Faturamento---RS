@@ -365,6 +365,56 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                        <div className="col-span-2 space-y-4">
+                          
+                          {/* Active Solicitations Section (Added to show details like Prazo) */}
+                          {orderSolicitacoes.length > 0 && (
+                             <div className="mb-6">
+                                <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
+                                   <FileCheck size={16} /> Solicitações Recentes
+                                </h4>
+                                <div className="grid grid-cols-1 gap-3">
+                                   {orderSolicitacoes.map(sol => (
+                                      <div key={sol.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                                         <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                                                    sol.status === StatusSolicitacao.PENDENTE ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                                    sol.status === StatusSolicitacao.EM_ANALISE ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                    sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                    sol.status === StatusSolicitacao.REJEITADO ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-600'
+                                                }`}>
+                                                    {sol.status.replace(/_/g, ' ')}
+                                                </span>
+                                                <span className="text-xs text-slate-400">{new Date(sol.data_solicitacao).toLocaleDateString()}</span>
+                                            </div>
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-sm font-bold text-slate-800">Vol: {sol.volume_solicitado} {sol.unidade}</span>
+                                            </div>
+                                            {(sol.prazo_pedido || sol.obs_faturamento) && (
+                                                <div className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                     {sol.prazo_pedido && <div><span className="font-bold">Prazo:</span> {sol.prazo_pedido}</div>}
+                                                     {sol.obs_faturamento && <div><span className="font-bold">Obs Fat:</span> {sol.obs_faturamento}</div>}
+                                                </div>
+                                            )}
+                                         </div>
+                                         <div className="flex flex-col items-end gap-1">
+                                             {sol.status === StatusSolicitacao.EM_ANALISE && (
+                                                 <>
+                                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${sol.aprovacao_comercial ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                                         Comercial: {sol.aprovacao_comercial ? 'OK' : '...'}
+                                                     </span>
+                                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${sol.aprovacao_credito ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                                         Crédito: {sol.aprovacao_credito ? 'OK' : '...'}
+                                                     </span>
+                                                 </>
+                                             )}
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+                          )}
+
                           <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><History size={16} /> Linha do Tempo</h4>
                           <div className="bg-white rounded-xl border border-slate-200 p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
                              {orderHistory.length > 0 ? (
