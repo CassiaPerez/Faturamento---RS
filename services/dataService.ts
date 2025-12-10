@@ -728,7 +728,7 @@ export const api = {
     }
   },
 
-  updateSolicitacaoStatus: async (id: string, status: StatusSolicitacao, user: User, motivoRejeicao?: string, forceBlockerRole?: Role) => {
+  updateSolicitacaoStatus: async (id: string, status: StatusSolicitacao, user: User, motivoRejeicao?: string, forceBlockerRole?: Role, extraData?: { prazo?: string, obs_faturamento?: string }) => {
     const idx = localSolicitacoes.findIndex(s => s.id === id);
     if (idx === -1) throw new Error("Solicitação não encontrada");
 
@@ -745,8 +745,30 @@ export const api = {
         updateData.motivo_rejeicao = formattedReason;
         updateData.blocked_by = blockedByRole;
         actionLabel = `Bloqueado por ${getRoleLabel(blockedByRole)}`;
+
+        // LOGICA DE EMAIL (RESTAURADA)
+        const solicitante = localUsers.find(u => u.name === sol.criado_por);
+        if (solicitante?.email) {
+            sendEmailToScript({
+                to: solicitante.email,
+                subject: `🛑 BLOQUEIO: Pedido ${sol.numero_pedido} - ${sol.nome_cliente}`,
+                body: `Sua solicitação foi bloqueada pelo setor ${getRoleLabel(blockedByRole)}.\n\nMotivo: ${motivoRejeicao}\n\nAcesse o sistema para mais detalhes.`,
+                action: 'block_notification'
+            }).then(ok => {
+                if(ok) console.log("Email de bloqueio enviado.");
+                else console.warn("Falha no envio de email.");
+            });
+        }
     } else if (status === StatusSolicitacao.EM_ANALISE) {
         actionLabel = `Enviado para Análise`;
+        
+        // Log extra data if present
+        const logParts = [];
+        if (extraData?.prazo) logParts.push(`Prazo: ${extraData.prazo}`);
+        if (extraData?.obs_faturamento) logParts.push(`Obs: ${extraData.obs_faturamento}`);
+        if (logParts.length > 0) {
+            formattedReason = logParts.join(' | ');
+        }
     } else if (status === StatusSolicitacao.FATURADO) {
         actionLabel = `Faturamento Realizado`;
     }
@@ -760,6 +782,10 @@ export const api = {
         updateData.obs_comercial = undefined;
         updateData.obs_credito = undefined;
         updateData.aprovado_por = undefined;
+        
+        // Adiciona dados extras de envio (Prazo / Obs Faturamento)
+        if (extraData?.prazo) updateData.prazo_pedido = extraData.prazo;
+        if (extraData?.obs_faturamento) updateData.obs_faturamento = extraData.obs_faturamento;
     }
     
     if (status === StatusSolicitacao.FATURADO) {
@@ -782,12 +808,18 @@ export const api = {
             localPedidos[pIdx].motivo_status = "Em Análise (Comercial & Crédito)";
         } else if (status === StatusSolicitacao.FATURADO) {
             const precoUnitario = pedido.valor_total / pedido.volume_total;
-            localPedidos[pIdx].volume_faturado = (localPedidos[pIdx].volume_faturado || 0) + sol.volume_solicitado;
-            localPedidos[pIdx].valor_faturado = (localPedidos[pIdx].valor_faturado || 0) + (sol.volume_solicitado * precoUnitario);
+            localPedidos[pIdx].volume_faturado = (localPedidos[pIdx].volume_faturado || 0) + Number(sol.volume_solicitado);
+            localPedidos[pIdx].valor_faturado = (localPedidos[pIdx].valor_faturado || 0) + (Number(sol.volume_solicitado) * precoUnitario);
             
-            localPedidos[pIdx].status = localPedidos[pIdx].volume_restante <= 0.0001 ? StatusPedido.FINALIZADO : StatusPedido.PARCIALMENTE_FATURADO;
-            localPedidos[pIdx].setor_atual = Role.FATURAMENTO;
-            localPedidos[pIdx].motivo_status = "Nota Fiscal Emitida";
+             // Se o volume faturado atingiu o total, finaliza.
+            if (localPedidos[pIdx].volume_restante <= 0.001) {
+                localPedidos[pIdx].status = StatusPedido.FINALIZADO;
+                localPedidos[pIdx].motivo_status = "Pedido Finalizado";
+            } else {
+                 localPedidos[pIdx].status = StatusPedido.PARCIALMENTE_FATURADO;
+                 localPedidos[pIdx].motivo_status = "Faturado Parcialmente";
+            }
+            localPedidos[pIdx].setor_atual = undefined;
         }
     }
 
@@ -795,37 +827,29 @@ export const api = {
     saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
     try {
-        // PROTEÇÃO: Se for ID temporário, não envia update para o banco
         if (id.startsWith('temp-')) {
-           console.warn("Item apenas local (ID temporário), pulando atualização no DB.");
-           await logEvento(sol.pedido_id, user, actionLabel, formattedReason || '', status === StatusSolicitacao.REJEITADO ? 'ERRO' : 'INFO', true);
-           
-           if (status === StatusSolicitacao.REJEITADO) {
-                // Passa o motivo cru (sem prefixo) para o email formatar bonito
-                sendRejectionNotification(sol, motivoRejeicao || "Motivo não informado", user, blockedByRole);
-           }
-           return;
+            console.warn("Item local, skip DB update status");
+            await logEvento(sol.pedido_id, user, actionLabel, formattedReason || 'Sem obs', 'SUCESSO', true);
+            return;
         }
 
-        const dbUpdateData = { ...updateData };
+        const dbUpdates: any = { 
+            status, 
+            motivo_rejeicao: updateData.motivo_rejeicao, 
+            blocked_by: updateData.blocked_by,
+            aprovado_por: updateData.aprovado_por,
+            aprovacao_comercial: updateData.aprovacao_comercial,
+            aprovacao_credito: updateData.aprovacao_credito,
+            obs_comercial: updateData.obs_comercial,
+            obs_credito: updateData.obs_credito,
+            obs_faturamento: updateData.obs_faturamento,
+            prazo_pedido: updateData.prazo_pedido
+        };
         
-        // CRITICAL FIX: Explicitly send NULL for fields that must be cleared in DB
-        // Supabase/Postgres ignores 'undefined' in updates, but respects 'null'.
-        if (status === StatusSolicitacao.EM_ANALISE) {
-            dbUpdateData.blocked_by = null;
-            dbUpdateData.motivo_rejeicao = null;
-            dbUpdateData.obs_comercial = null;
-            dbUpdateData.obs_credito = null;
-            dbUpdateData.aprovado_por = null;
-            // approval flags are boolean false, which is fine
-        } else {
-             // For other statuses, safety checks
-             if (dbUpdateData.blocked_by === undefined) delete dbUpdateData.blocked_by;
-        }
-
-        const { error } = await supabase.from('solicitacoes').update(dbUpdateData).eq('id', id);
+        const { error } = await supabase.from('solicitacoes').update(dbUpdates).eq('id', id);
         if (error) throw error;
         
+        // Sync Pedido Status to DB
         if (pIdx >= 0) {
             const p = localPedidos[pIdx];
             await supabase.from('pedidos').update({
@@ -838,356 +862,80 @@ export const api = {
             }).eq('id', p.id);
         }
 
-        await logEvento(sol.pedido_id, user, actionLabel, formattedReason || '', status === StatusSolicitacao.REJEITADO ? 'ERRO' : 'INFO');
-        
-        if (status === StatusSolicitacao.REJEITADO) {
-            // Passa o motivo cru (sem prefixo) para o email formatar bonito
-            sendRejectionNotification(sol, motivoRejeicao || "Motivo não informado", user, blockedByRole);
-        }
-
-    } catch (e: any) {
-        console.warn("Operação offline (Update Status) ou Erro DB:", e);
-        // Se falhou no DB, tentamos garantir que o log reflete a tentativa
-        await logEvento(sol.pedido_id, user, actionLabel, formattedReason || ('Erro DB: ' + e.message), status === StatusSolicitacao.REJEITADO ? 'ERRO' : 'ALERTA', true);
-        
-        if (status === StatusSolicitacao.REJEITADO) {
-            sendRejectionNotification(sol, motivoRejeicao || "Motivo não informado", user, blockedByRole);
-        }
+        await logEvento(sol.pedido_id, user, actionLabel, formattedReason || 'Sem obs', 'SUCESSO');
+    } catch (e) {
+        console.warn("Operação offline (Update Status):", e);
+        await logEvento(sol.pedido_id, user, actionLabel, formattedReason, 'SUCESSO', true);
     }
   },
 
-  triggerManualSync: async (): Promise<LogSincronizacao> => {
-     // Inicializa logs para garantir que erros sejam capturados
-     const logs: string[] = ['Iniciando protocolo de sincronização...'];
-     let success = false;
+  triggerManualSync: async () => {
+      const startTime = new Date();
+      let logMsgs: string[] = [];
+      let success = false;
+      
+      try {
+          if (!currentConfig.csvUrl) throw new Error("URL do CSV não configurada.");
+          
+          const downloadUrl = convertDriveLink(currentConfig.csvUrl);
+          logMsgs.push(`Baixando de: ${downloadUrl}`);
+          
+          const response = await fetch(downloadUrl);
+          if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+          
+          const csvText = await response.text();
+          const parsedOrders = parseCSV(csvText);
+          logMsgs.push(`Linhas processadas: ${parsedOrders.length}`);
+          
+          if (parsedOrders.length === 0) throw new Error("Nenhum pedido encontrado no CSV.");
 
-     try {
-         // Simula delay de rede para feedback visual
-         await new Promise(r => setTimeout(r, 1000));
-         
-         if (!navigator.onLine) {
-             throw new Error("Sem conexão com a internet para acessar o Google Drive.");
-         }
+          // Merge Logic
+          let added = 0;
+          let updated = 0;
+          
+          parsedOrders.forEach(newP => {
+              const existingIdx = localPedidos.findIndex(p => p.id === newP.id);
+              if (existingIdx >= 0) {
+                  // Keep local state but update basic info
+                  const existing = localPedidos[existingIdx];
+                  localPedidos[existingIdx] = {
+                      ...existing,
+                      valor_total: newP.valor_total,
+                      // We don't overwrite volume info recklessly because of local state (solicitacoes)
+                      // Ideally we should sync changes. For now we just update values.
+                  };
+                  updated++;
+              } else {
+                  if (!deletedIds.includes(newP.id)) {
+                      localPedidos.push(newP);
+                      added++;
+                  }
+              }
+          });
+          
+          saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
+          logMsgs.push(`Novos: ${added}, Atualizados: ${updated}`);
+          success = true;
 
-         if (currentConfig.csvUrl && currentConfig.csvUrl.startsWith('http')) {
-             const directUrl = convertDriveLink(currentConfig.csvUrl);
-             logs.push(`URL Original: ${currentConfig.csvUrl.substring(0, 30)}...`);
-             
-             let response: Response | null = null;
-             let csvText = '';
+      } catch (e: any) {
+          console.error(e);
+          logMsgs.push(`Erro: ${e.message}`);
+          success = false;
+      }
 
-             // TENTATIVA 1: Download Direto
-             try {
-                logs.push(`Tentativa 1: Download Direto...`);
-                response = await fetch(directUrl);
-                if (response.ok) {
-                    csvText = await response.text();
-                } else {
-                    logs.push(`Falha download direto: ${response.status}`);
-                }
-             } catch(e) {
-                 logs.push(`Erro fetch direto (CORS provável): ${e}`);
-             }
-
-             // TENTATIVA 2: Fallback via CORS Proxy (Necessário para Drive sem "Publish to Web")
-             if (!csvText || csvText.includes('<!DOCTYPE html>')) {
-                 logs.push(`Tentativa 2: Usando CORS Proxy seguro...`);
-                 const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(directUrl);
-                 try {
-                     response = await fetch(proxyUrl);
-                     if (response.ok) {
-                         csvText = await response.text();
-                         logs.push(`Download via Proxy realizado com sucesso.`);
-                     }
-                 } catch (proxyError) {
-                     logs.push(`Falha no Proxy: ${proxyError}`);
-                 }
-             }
-
-             if (csvText && !csvText.trim().startsWith('<!DOCTYPE html>')) {
-                 const novosPedidos = parseCSV(csvText);
-                 if (novosPedidos.length > 0) {
-                     logs.push(`${novosPedidos.length} pedidos válidos identificados.`);
-                     
-                     // MAPA DE UNICIDADE: Prepara mapa dos pedidos atuais para evitar O(N^2)
-                     const existingOrdersMap = new Map(localPedidos.map(p => [String(p.numero_pedido).trim(), p]));
-                     const actuallyNew: Pedido[] = [];
-                     const seenInThisBatch = new Set<string>();
-
-                     let updatedCount = 0;
-                     let newCount = 0;
-                     let duplicateSkipped = 0;
-
-                     novosPedidos.forEach(np => {
-                         const normalizedId = String(np.numero_pedido).trim();
-
-                         // 1. Checar se já vimos este ID neste mesmo CSV (Duplicidade no arquivo)
-                         if (seenInThisBatch.has(normalizedId)) {
-                             return; 
-                         }
-                         seenInThisBatch.add(normalizedId);
-
-                         // 2. Checar se está na blacklist de excluídos
-                         if (deletedIds.includes(normalizedId)) {
-                             return;
-                         }
-
-                         const existing = existingOrdersMap.get(normalizedId);
-
-                         if (existing) {
-                             // Se pedido já existe, atualiza dados cadastrais se ainda for PENDENTE
-                             // Isso evita sobrescrever status de faturamento
-                             if (existing.status === StatusPedido.PENDENTE) {
-                                 const idx = localPedidos.findIndex(p => String(p.id).trim() === normalizedId);
-                                 if (idx !== -1) {
-                                     localPedidos[idx] = { 
-                                         ...localPedidos[idx], 
-                                         valor_total: np.valor_total,
-                                         volume_total: np.volume_total,
-                                         volume_restante: np.volume_total, // Reset de volume se ainda pendente
-                                         unidade: np.unidade,
-                                         nome_cliente: np.nome_cliente,
-                                         nome_produto: np.nome_produto
-                                     };
-                                     updatedCount++;
-                                 }
-                             } else {
-                                 // Se já tem movimentação, ignora ou apenas atualiza nome
-                                 duplicateSkipped++;
-                             }
-                         } else {
-                             // Novo Pedido Real
-                             actuallyNew.push(np);
-                             existingOrdersMap.set(normalizedId, np); // Add to map to prevent duplicates
-                             newCount++;
-                         }
-                     });
-                     
-                     // Adiciona os realmente novos
-                     if (actuallyNew.length > 0) {
-                         localPedidos = [...localPedidos, ...actuallyNew];
-                     }
-
-                     saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
-                     logs.push(`Sincronização concluída: ${newCount} novos adicionados, ${updatedCount} atualizados.`);
-                     if (duplicateSkipped > 0) logs.push(`${duplicateSkipped} pedidos existentes ignorados (em andamento/finalizados).`);
-                     success = true;
-                 } else {
-                     logs.push('AVISO: O arquivo foi baixado mas nenhum pedido foi extraído. Verifique o formato CSV.');
-                 }
-             } else {
-                 logs.push('ERRO CRÍTICO: Não foi possível obter o CSV legível.');
-                 logs.push('Motivo: Bloqueio de segurança do Google (CORS) ou link incorreto.');
-                 logs.push('Solução: No Google Sheets, use "Arquivo > Compartilhar > Publicar na Web > CSV".');
-             }
-         } else {
-             logs.push('Nenhuma URL CSV válida configurada.');
-         }
-
-     } catch (e: any) {
-         logs.push(`Erro fatal na sincronização: ${e.message}`);
-         success = false;
-     }
-
-     const newLog: LogSincronizacao = {
-         id: `sync-${Date.now()}`,
-         data: new Date().toISOString(),
-         tipo: 'MANUAL',
-         arquivo: 'carteira_pedidos.csv',
-         sucesso: success,
-         mensagens: logs
-     };
-
-     // Adiciona ao topo e garante limite
-     localLogs.unshift(newLog);
-     if (localLogs.length > 50) localLogs = localLogs.slice(0, 50);
-     saveToStorage(STORAGE_KEYS.LOGS, localLogs);
-     
-     // Retorna o log mesmo em caso de erro, para que a UI possa exibir
-     return newLog; 
-  },
-  
-  resetDatabase: async () => {
-    localStorage.clear();
-    location.reload(); 
-    return { success: true, message: "" }; 
+      // Create Log
+      const newLog: LogSincronizacao = {
+          id: `log-${Date.now()}`,
+          data: startTime.toISOString(),
+          tipo: 'MANUAL',
+          arquivo: 'carteira_pedidos.csv',
+          sucesso: success,
+          mensagens: logMsgs
+      };
+      
+      localLogs.unshift(newLog);
+      saveToStorage(STORAGE_KEYS.LOGS, localLogs);
+      
+      return success;
   }
-};
-
-const sendRejectionNotification = async (solicitacao: SolicitacaoFaturamento, motivo: string, quemRejeitou: User, sectorRole?: Role) => {
-    // Verificação simplificada de conexão apenas via Navigator (Ignora status do DB)
-    if (!navigator.onLine) {
-        console.log(`[EMAIL ADIADO] Sem conexão de internet para enviar alerta para ${solicitacao.criado_por}`);
-        return;
-    }
-
-    const normalize = (str: string) => str.trim().toLowerCase();
-    
-    // 1. Encontrar o Vendedor
-    let vendedor: User | undefined = localUsers.find(u => normalize(u.name) === normalize(solicitacao.criado_por));
-    
-    if (!vendedor) {
-        try {
-            const { data } = await supabase.from('app_users').select('*').ilike('name', solicitacao.criado_por).single();
-            if (data) vendedor = data as User;
-        } catch (e) {}
-    }
-    
-    if (!vendedor || !vendedor.email) return;
-    
-    let emailTo = vendedor.email;
-    let emailCc = '';
-    let managerName = '';
-
-    // 2. Encontrar o Gerente vinculado
-    if (vendedor.manager_id) {
-        let manager: User | undefined = localUsers.find(u => u.id === vendedor?.manager_id);
-        
-        if (!manager) {
-            try {
-                const { data } = await supabase.from('app_users').select('*').eq('id', vendedor?.manager_id).single();
-                if (data) manager = data as User;
-            } catch (e) {}
-        }
-
-        if (manager && manager.email) {
-            emailCc = manager.email;
-            managerName = manager.name;
-        }
-    }
-
-    const subject = `[BLOQUEIO] Pedido ${solicitacao.numero_pedido} - ${solicitacao.nome_cliente}`;
-    
-    // Fallback de texto simples
-    const textBody = `
-Olá, ${vendedor.name}
-
-Informamos que a solicitação de faturamento abaixo sofreu um apontamento de bloqueio e requer sua atenção.
-
-DETALHES
-Pedido: ${solicitacao.numero_pedido}
-Cliente: ${solicitacao.nome_cliente}
-Produto: ${solicitacao.nome_produto}
-Volume: ${solicitacao.volume_solicitado} ${solicitacao.unidade}
-
-MOTIVO DO BLOQUEIO
-Setor: ${getRoleLabel(sectorRole || quemRejeitou.role)}
-Responsável: ${quemRejeitou.name}
-Motivo: "${motivo}"
-
-Acesse o sistema Cropflow para regularizar.
-    `.trim();
-
-    // Template HTML Visual - Enhanced
-    const htmlBody = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Notificação de Bloqueio</title>
-      </head>
-      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); margin-top: 40px; margin-bottom: 40px;">
-          
-          <!-- Header Branding -->
-          <div style="background-color: #0f172a; padding: 20px 40px; text-align: center; border-bottom: 1px solid #1e293b;">
-             <span style="color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: 2px;">CROPFLOW</span>
-          </div>
-
-          <!-- Alert Banner -->
-          <div style="background-color: #ef4444; padding: 30px 40px; text-align: center;">
-            <div style="background-color: rgba(255,255,255,0.2); width: 48px; height: 48px; border-radius: 50%; margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; line-height: 48px; font-size: 24px; color: white;">
-               !
-            </div>
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">Pedido Bloqueado</h1>
-            <p style="color: #fecaca; margin: 8px 0 0 0; font-size: 14px; font-weight: 500;">Ação necessária para prosseguir com o faturamento</p>
-          </div>
-
-          <!-- Content -->
-          <div style="padding: 40px;">
-            <p style="color: #334155; font-size: 16px; margin: 0 0 24px 0; line-height: 1.6;">
-              Olá, <strong>${vendedor.name}</strong>.<br>
-              A solicitação abaixo foi analisada e recebeu um apontamento de <strong style="color: #ef4444;">bloqueio</strong>.
-            </p>
-
-            <!-- Order Details Card -->
-            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 30px;">
-               <div style="background-color: #f1f5f9; padding: 12px 20px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">
-                  Resumo do Pedido
-               </div>
-               <div style="padding: 20px;">
-                  <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
-                    <tr>
-                      <td style="padding-bottom: 12px; color: #64748b; font-size: 13px; font-weight: 500; width: 30%;">Número</td>
-                      <td style="padding-bottom: 12px; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;">${solicitacao.numero_pedido}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding-bottom: 12px; color: #64748b; font-size: 13px; font-weight: 500;">Cliente</td>
-                      <td style="padding-bottom: 12px; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;">${solicitacao.nome_cliente}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding-bottom: 12px; color: #64748b; font-size: 13px; font-weight: 500;">Produto</td>
-                      <td style="padding-bottom: 12px; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;">${solicitacao.nome_produto}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding-top: 12px; border-top: 1px dashed #e2e8f0; color: #64748b; font-size: 13px; font-weight: 500;">Volume</td>
-                      <td style="padding-top: 12px; border-top: 1px dashed #e2e8f0; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;">${solicitacao.volume_solicitado} ${solicitacao.unidade}</td>
-                    </tr>
-                  </table>
-               </div>
-            </div>
-
-            <!-- Reason Box -->
-            <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 25px;">
-               <p style="margin: 0 0 10px 0; color: #b91c1c; font-size: 11px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">Motivo do Bloqueio</p>
-               <p style="margin: 0 0 20px 0; color: #7f1d1d; font-size: 16px; font-weight: 600; line-height: 1.5;">"${motivo}"</p>
-               
-               <div style="display: flex; align-items: center; gap: 12px;">
-                  <div style="background-color: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
-                     Setor: ${getRoleLabel(sectorRole || quemRejeitou.role)}
-                  </div>
-                  <div style="color: #991b1b; font-size: 13px;">
-                     Resp: <strong>${quemRejeitou.name}</strong>
-                  </div>
-               </div>
-            </div>
-
-            <div style="margin-top: 30px; text-align: center;">
-               <a href="#" style="background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; display: inline-block;">Acessar Cropflow</a>
-            </div>
-            
-            <p style="text-align: center; margin-top: 24px; color: #94a3b8; font-size: 12px; line-height: 1.5;">
-              Este é um email automático. Por favor, não responda.<br>
-              Acesse o sistema para regularizar a pendência.
-            </p>
-          </div>
-          
-          <!-- Footer -->
-          <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
-             <p style="margin: 0; color: #cbd5e1; font-size: 11px; font-weight: 500;">&copy; ${new Date().getFullYear()} Grupo Cropflow • Gestão Inteligente</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const emailBody = {
-        action: 'notify_rejection', 
-        pedido: solicitacao.numero_pedido,
-        cliente: solicitacao.nome_cliente,
-        produto: solicitacao.nome_produto,
-        motivo: motivo,
-        setor: getRoleLabel(sectorRole || quemRejeitou.role),
-        responsavel_bloqueio: quemRejeitou.name,
-        to: emailTo,
-        cc: emailCc,
-        vendedor_nome: vendedor.name,
-        gerente_nome: managerName,
-        subject: subject, 
-        body: textBody,      // Fallback para scripts simples
-        htmlBody: htmlBody   // Conteúdo rico para scripts que suportam HTML
-    };
-
-    await sendEmailToScript(emailBody);
 };
