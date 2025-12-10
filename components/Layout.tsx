@@ -16,7 +16,9 @@ import {
   Banknote,
   Settings,
   Menu,
-  X
+  X,
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -30,11 +32,39 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, currentView, onNavigate }) => {
   const [usersList, setUsersList] = useState<User[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Sync Widget State
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     // Fetch users for the switcher (keeps dropdown in sync)
     api.getUsers().then(setUsersList);
+    updateSyncTime();
+    
+    // Polling para atualizar o horário da última sync visualmente caso ocorra em background
+    const interval = setInterval(updateSyncTime, 60000); 
+    return () => clearInterval(interval);
   }, [currentView]);
+
+  const updateSyncTime = async () => {
+    const time = await api.getLastSyncTime();
+    setLastSyncTime(time);
+  };
+
+  const handleForceSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+        await api.triggerManualSync('MANUAL');
+        await updateSyncTime();
+    } catch (e) {
+        console.error("Erro no sync manual pelo header:", e);
+        alert("Não foi possível sincronizar agora. Verifique sua conexão.");
+    } finally {
+        setIsSyncing(false);
+    }
+  };
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [Role.ADMIN, Role.GERENTE, Role.VENDEDOR, Role.FATURAMENTO, Role.COMERCIAL, Role.CREDITO] },
@@ -50,6 +80,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
   const handleNavigate = (id: string) => {
     onNavigate(id);
     setIsMobileMenuOpen(false); // Close menu on mobile after click
+  };
+
+  const formatLastSync = (isoString: string | null) => {
+      if (!isoString) return 'Nunca';
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -157,23 +193,27 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
           </div>
 
           <div className="flex items-center gap-3 md:gap-6">
-            {/* Search Bar (Hidden on Mobile) */}
-            <div className="hidden md:flex items-center bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-crop-100 focus-within:border-crop-400 transition-all w-64 group">
-              <Search size={16} className="text-slate-400 group-focus-within:text-crop-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Pesquisa global..." 
-                className="bg-transparent border-none focus:ring-0 text-sm text-slate-700 placeholder:text-slate-400 w-full ml-2"
-              />
-            </div>
-
-            {/* Sync Status Badge (Hidden on Small Mobile) */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 text-[10px] font-bold uppercase tracking-wide">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Sync Ativo
+            
+            {/* Widget de Sincronização (Visível para todos) */}
+            <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-100">
+               <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold leading-tight">Última Sincronização</p>
+                  <p className="text-xs font-mono font-medium text-slate-600 flex items-center justify-end gap-1">
+                     <Clock size={10} /> {formatLastSync(lastSyncTime)}
+                  </p>
+               </div>
+               <button 
+                  onClick={handleForceSync}
+                  disabled={isSyncing}
+                  className={`p-2 rounded-lg border transition-all ${
+                     isSyncing 
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                      : 'bg-white text-crop-600 border-crop-200 hover:bg-crop-50 hover:border-crop-300 shadow-sm'
+                  }`}
+                  title="Atualizar dados agora"
+               >
+                  <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+               </button>
             </div>
 
             <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>

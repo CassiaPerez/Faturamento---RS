@@ -81,6 +81,11 @@ export interface SolicitacaoFaturamento {
   obs_comercial?: string;
   obs_credito?: string;
   obs_vendedor?: string;
+  
+  // Novos campos para fluxo de faturamento
+  prazo_pedido?: string;
+  obs_faturamento?: string;
+  
   blocked_by?: Role;
 }
 

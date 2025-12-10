@@ -59,7 +59,7 @@ const SyncManager: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Sincronização de Dados</h2>
           <p className="text-slate-500 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            Conector Google Drive ativo (Ciclo de 3h)
+            Conector Google Drive ativo
           </p>
         </div>
         <button
@@ -80,8 +80,8 @@ const SyncManager: React.FC = () => {
             <FileText size={20} className="text-slate-600" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase">Arquivo de Origem</p>
-            <p className="text-sm font-medium text-slate-700 truncate font-mono">carteira_pedidos.csv</p>
+            <p className="text-xs font-bold text-slate-400 uppercase">Arquivo Importado</p>
+            <p className="text-sm font-medium text-slate-700 truncate font-mono">Carteira de Pedidos (CSV/TXT)</p>
           </div>
         </div>
         <a href="https://drive.google.com/file/d/1ifetFw_-dbBGrUQrupy9luJqxuD6sMVy/view" target="_blank" className="text-xs text-brand-600 hover:underline ml-12">

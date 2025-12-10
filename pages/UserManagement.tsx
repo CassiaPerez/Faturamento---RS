@@ -20,6 +20,7 @@ const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [error, setError] = useState('');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newUser, setNewUser] = useState({
@@ -42,6 +43,7 @@ const UserManagement: React.FC = () => {
   const openCreateModal = () => {
     setNewUser({ name: '', email: '', role: Role.VENDEDOR, manager_id: '', password: '' });
     setEditingId(null);
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -54,6 +56,7 @@ const UserManagement: React.FC = () => {
       password: '' // Não preenche a senha por segurança, usuário digita se quiser trocar
     });
     setEditingId(user.id);
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -77,14 +80,21 @@ const UserManagement: React.FC = () => {
     // Remover undefined properties
     if (userPayload.password === undefined) delete (userPayload as any).password;
 
-    if (editingId) {
-      await api.updateUser({ id: editingId, ...userPayload });
-    } else {
-      await api.createUser(userPayload as any);
-    }
+    try {
+        setError('');
+        if (editingId) {
+            await api.updateUser({ id: editingId, ...userPayload });
+        } else {
+            await api.createUser(userPayload as any);
+        }
 
-    setIsModalOpen(false);
-    loadUsers(); 
+        setIsModalOpen(false);
+        loadUsers(); 
+    } catch (e: any) {
+        console.error(e);
+        // Exibe erro na modal sem fechar
+        setError(e.message || "Erro ao salvar usuário no banco de dados.");
+    }
   };
 
   const handleDeleteUser = async (id: string) => {
@@ -203,6 +213,17 @@ const UserManagement: React.FC = () => {
             </div>
             
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* ALERTA DE ERRO */}
+              {error && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3 text-red-700 animate-shake">
+                    <AlertCircle className="shrink-0 mt-0.5" size={18} />
+                    <div className="text-sm">
+                        <span className="font-bold">Atenção:</span> {error}
+                    </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
@@ -245,7 +266,6 @@ const UserManagement: React.FC = () => {
                                 <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
                         </select>
-                        {/* Ícone de seta para o select */}
                         <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-purple-500">
                           <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
                         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import OrderList from './pages/OrderList';
@@ -16,6 +16,26 @@ import { api } from './services/dataService';
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
+
+  // Configuração do Timer de Sincronização Automática (3 horas)
+  useEffect(() => {
+    const SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 Horas
+
+    const timer = setInterval(() => {
+      console.log(`[AutoSync] Iniciando sincronização automática programada (${new Date().toLocaleTimeString()})...`);
+      api.triggerManualSync('AUTOMATICO').then(res => {
+         console.log("[AutoSync] Sucesso:", res);
+      }).catch(err => {
+         console.error("[AutoSync] Falha:", err);
+      });
+    }, SYNC_INTERVAL_MS);
+
+    // Tenta rodar uma vez ao montar o app para garantir dados frescos,
+    // mas de forma silenciosa (sem bloquear UI)
+    api.triggerManualSync('AUTOMATICO').catch(() => console.warn("Sync inicial falhou (normal se offline)"));
+
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
