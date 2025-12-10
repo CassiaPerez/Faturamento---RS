@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye } from 'lucide-react';
+import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye, Calendar } from 'lucide-react';
 
 const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -11,6 +11,12 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Modal de Envio para Aprovação (Novos campos)
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [sendId, setSendId] = useState<string | null>(null);
+  const [sendPrazo, setSendPrazo] = useState('');
+  const [sendObs, setSendObs] = useState('');
 
   // Modal de Desbloqueio
   const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
@@ -47,6 +53,47 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
       }
       return s;
     }));
+  };
+
+  // Funções para Modal de Envio
+  const openSendModal = (id: string) => {
+    setSendId(id);
+    setSendPrazo('');
+    setSendObs('');
+    setIsSendModalOpen(true);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!sendId) return;
+
+    // Chama API passando os dados extras
+    await api.updateSolicitacaoStatus(sendId, StatusSolicitacao.EM_ANALISE, user, undefined, undefined, {
+        prazo: sendPrazo,
+        obs_faturamento: sendObs
+    });
+
+    // Atualiza estado local
+    setSolicitacoes(prev => prev.map(s => {
+      if (s.id === sendId) {
+        return { 
+           ...s, 
+           status: StatusSolicitacao.EM_ANALISE,
+           prazo_pedido: sendPrazo || undefined,
+           obs_faturamento: sendObs || undefined,
+           aprovacao_comercial: false,
+           aprovacao_credito: false,
+           blocked_by: undefined,
+           motivo_rejeicao: undefined,
+           obs_comercial: undefined,
+           obs_credito: undefined,
+           aprovado_por: undefined
+        };
+      }
+      return s;
+    }));
+
+    setIsSendModalOpen(false);
+    setSendId(null);
   };
   
   const openUnblockModal = (id: string) => {
@@ -170,7 +217,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span>
                  <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>{sol.nome_cliente}</h4>
                  
-                 {/* NOVO: Exibir setor responsável pelo bloqueio no cabeçalho */}
+                 {/* Exibir setor responsável pelo bloqueio no cabeçalho */}
                  {sol.status === StatusSolicitacao.REJEITADO && (
                     <div className="mt-2 flex items-center gap-1.5">
                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bloqueio:</span>
@@ -187,7 +234,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                </div>
              </div>
              <div className="p-5 flex-1 space-y-4">
-               {/* ADIÇÃO: Exibir Produto */}
+               {/* Exibir Produto */}
                <div className="mb-2 pb-2 border-b border-slate-50">
                    <p className="text-[10px] text-slate-400 font-bold uppercase">Produto</p>
                    <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
@@ -216,6 +263,24 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                                <Clock size={12} /> Crédito: ...
                            </span>
                        )}
+                   </div>
+               )}
+
+               {/* Exibir Observações do Faturamento/Envio */}
+               {(sol.prazo_pedido || sol.obs_faturamento) && (
+                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2 space-y-1">
+                      {sol.prazo_pedido && (
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                            <Calendar size={12} className="text-slate-400" />
+                            <span className="font-bold uppercase">Prazo:</span> {sol.prazo_pedido}
+                         </div>
+                      )}
+                      {sol.obs_faturamento && (
+                         <div className="flex items-start gap-1.5 text-[10px] text-slate-600">
+                            <MessageSquare size={12} className="text-slate-400 mt-0.5" />
+                            <div><span className="font-bold uppercase">Obs. Fat:</span> {sol.obs_faturamento}</div>
+                         </div>
+                      )}
                    </div>
                )}
 
@@ -266,7 +331,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
              {/* ÁREA DE AÇÕES */}
              <div className="p-4 bg-slate-50 border-t border-slate-100">
                
-               {/* LÓGICA DE PERMISSÃO: GERENTE APENAS VISUALIZA */}
                {user.role === Role.GERENTE ? (
                  <div className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-100/50 rounded-lg border border-slate-200 border-dashed text-center flex items-center justify-center gap-2 cursor-default">
                     <Eye size={14} /> Visualização Gerencial (Apenas Leitura)
@@ -276,7 +340,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                    {activeTab === 'triage' && sol.status === StatusSolicitacao.PENDENTE && (
                      <div className="flex gap-3">
                        <button onClick={() => openRejectModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"><XCircle size={14} /> Rejeitar</button>
-                       <button onClick={() => handleStatusChange(sol.id, StatusSolicitacao.EM_ANALISE)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"><Send size={14} /> Enviar p/ Aprovação</button>
+                       <button onClick={() => openSendModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"><Send size={14} /> Enviar p/ Aprovação</button>
                      </div>
                    )}
                    
@@ -306,7 +370,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                  </>
                )}
 
-               {/* Visualização passiva para itens EM_ANALISE (Mantido para todos, inclusive Gerente) */}
                {activeTab === 'triage' && sol.status === StatusSolicitacao.EM_ANALISE && (
                    <div className="w-full px-4 py-2 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg border border-slate-200 text-center flex items-center justify-center gap-2">
                        <Clock size={14} /> Aguardando Setores...
@@ -336,6 +399,50 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
              <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-amber-50/50"><div className="p-2 bg-amber-100 rounded-full text-amber-600"><RefreshCcw size={24} /></div><h3 className="text-lg font-bold text-slate-800">Desbloquear / Reiniciar</h3></div>
              <div className="p-6 space-y-4"><p className="text-sm text-slate-600">Justifique o desbloqueio para reiniciar o processo.</p><textarea value={unblockReason} onChange={(e) => setUnblockReason(e.target.value)} placeholder="Ex: Correção realizada..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none text-sm min-h-[100px]" autoFocus /></div>
              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3"><button onClick={() => setIsUnblockModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button><button onClick={handleConfirmUnblock} disabled={!unblockReason.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar</button></div>
+           </div>
+         </div>
+       )}
+
+       {/* Modal de Envio para Aprovação (Novo) */}
+       {isSendModalOpen && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-blue-50/50">
+               <div className="p-2 bg-blue-100 rounded-full text-blue-600"><Send size={24} /></div>
+               <h3 className="text-lg font-bold text-slate-800">Enviar para Aprovação</h3>
+             </div>
+             <div className="p-6 space-y-5">
+               <p className="text-sm text-slate-600">Preencha os dados abaixo para encaminhar a solicitação aos setores Comercial e de Crédito.</p>
+               
+               <div className="space-y-1.5">
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                      <Calendar size={12} /> Prazo do Pedido
+                   </label>
+                   <input 
+                      type="text" 
+                      placeholder="Ex: 30 dias, 30/60/90..." 
+                      value={sendPrazo}
+                      onChange={e => setSendPrazo(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm font-medium"
+                   />
+               </div>
+
+               <div className="space-y-1.5">
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                      <MessageSquare size={12} /> Observação do Faturamento (Opcional)
+                   </label>
+                   <textarea 
+                      value={sendObs}
+                      onChange={e => setSendObs(e.target.value)}
+                      placeholder="Alguma nota importante para os aprovadores?" 
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm min-h-[80px]"
+                   />
+               </div>
+             </div>
+             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
+               <button onClick={() => setIsSendModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
+               <button onClick={handleConfirmSend} disabled={!sendPrazo.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar Envio</button>
+             </div>
            </div>
          </div>
        )}
