@@ -70,6 +70,28 @@ export const MOCK_USERS: User[] = [
   { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropflow.com', password: '123' },
   { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropflow.com', password: '123' },
   { id: 'u7', name: 'Analista Crédito', role: Role.CREDITO, email: 'credito@cropflow.com', password: '123' },
+  // VENDEDORES COM CÓDIGOS REAIS (Baseados na imagem enviada)
+  { id: 'v1', name: 'DESESSARDS E VIEIRA REPRESENTACOES LTDA', role: Role.VENDEDOR, email: 'desessards@cropflow.com', password: '123', sales_codes: ['85400', '255340'] },
+  { id: 'v2', name: 'EDUARDO FATTORE E CIA LTDA', role: Role.VENDEDOR, email: 'eduardo@cropflow.com', password: '123', sales_codes: ['107806', '275706', '80732', '251623'] },
+  { id: 'v3', name: 'DANIEL LORENZONI LTDA', role: Role.VENDEDOR, email: 'daniel@cropflow.com', password: '123', sales_codes: ['76147', '247945'] },
+  { id: 'v4', name: 'AGRO RUPPENTHAL SERVICOS DE INFORMATICA LTDA', role: Role.VENDEDOR, email: 'maurel@cropflow.com', password: '123', sales_codes: ['108530', '276266'] },
+  { id: 'v5', name: 'A. J. DEBONI & CIA LTDA', role: Role.VENDEDOR, email: 'deboni@cropflow.com', password: '123', sales_codes: ['81125', '251932'] },
+  { id: 'v6', name: 'GLOWACKI AGENCIAMENTOS', role: Role.VENDEDOR, email: 'glowacki@cropflow.com', password: '123', sales_codes: ['25821', '745893'] },
+  { id: 'v7', name: 'MARCIO BLANGER', role: Role.VENDEDOR, email: 'marcio@cropflow.com', password: '123', sales_codes: ['18872', '212085'] },
+  { id: 'v8', name: 'CROPFIELD DO BRASIL S.A.', role: Role.VENDEDOR, email: 'matriz@cropflow.com', password: '123', sales_codes: ['23795', '216023'] },
+  { id: 'v9', name: 'PEDRO HENRIQUE DE BONA', role: Role.VENDEDOR, email: 'pedro@cropflow.com', password: '123', sales_codes: ['11577', '101471'] },
+  { id: 'v10', name: 'RODRIGO LUIS DA SILVA', role: Role.VENDEDOR, email: 'rodrigo.silva@cropflow.com', password: '123', sales_codes: ['21183', '214231'] },
+  { id: 'v11', name: 'RODRIGO DARIVA', role: Role.VENDEDOR, email: 'rodrigo.dariva@cropflow.com', password: '123', sales_codes: ['23119', '215538'] },
+  { id: 'v12', name: 'LARISSA WILKE TEIXEIRA', role: Role.VENDEDOR, email: 'larissa@cropflow.com', password: '123', sales_codes: ['43269', '230157'] },
+  { id: 'v13', name: 'DANTE LUIS DAMIANI', role: Role.VENDEDOR, email: 'dante@cropflow.com', password: '123', sales_codes: ['25764', '745842', '87229', '256841', '89980', '259032', '45733', '232007'] },
+  { id: 'v14', name: 'FABIO DA ROCHA CORBELLINI', role: Role.VENDEDOR, email: 'fabio@cropflow.com', password: '123', sales_codes: ['54318', '238772'] },
+  { id: 'v15', name: 'RONALDO ROSSLER RIBAS', role: Role.VENDEDOR, email: 'ronaldo@cropflow.com', password: '123', sales_codes: ['77730', '249228'] },
+  { id: 'v16', name: 'ROBSON SUHRE DE CAMPOS', role: Role.VENDEDOR, email: 'robson@cropflow.com', password: '123', sales_codes: ['59984', '242974'] },
+  { id: 'v17', name: 'VALDECIR ALVES DE OLIVEIRA', role: Role.VENDEDOR, email: 'valdecir@cropflow.com', password: '123', sales_codes: ['58785', '242075'] },
+  { id: 'v18', name: 'VEIT CONSULTORIA AGRICOLA', role: Role.VENDEDOR, email: 'andre.veit@cropflow.com', password: '123', sales_codes: ['54506', '238910'] },
+  { id: 'v19', name: 'BAGUAL AGRO PARTICIPACOES', role: Role.VENDEDOR, email: 'bagual@cropflow.com', password: '123', sales_codes: ['34849', '223797'] },
+  { id: 'v20', name: 'CASSIO MARQUES FERREIRA', role: Role.VENDEDOR, email: 'cassio@cropflow.com', password: '123', sales_codes: ['29994', '220363'] },
+  { id: 'v21', name: 'LEONARDO WILKE TEIXEIRA', role: Role.VENDEDOR, email: 'leonardo@cropflow.com', password: '123', sales_codes: ['91532', '260263'] }
 ];
 let localUsers: User[] = loadFromStorage(STORAGE_KEYS.USERS, [...MOCK_USERS]);
 
@@ -115,6 +137,8 @@ const filterDataByRole = (data: Pedido[], user: User) => {
         return data.filter(p => {
             // Normaliza o código do pedido
             const orderCode = normalizeCode(p.codigo_vendedor);
+            // Log para debug se necessário
+            // console.log(`Comparando pedido ${p.numero_pedido}: ${orderCode} com userCodes: ${userCodes}`);
             return userCodes.includes(orderCode);
         });
     }
@@ -470,7 +494,26 @@ export const api = {
             sendEmailToScript({
                 to: createdUser.email,
                 subject: 'Bem-vindo ao Cropflow - Credenciais de Acesso',
-                body: `Olá ${createdUser.name},\n\nSeu cadastro no sistema Cropflow foi realizado com sucesso.\n\nSuas credenciais de acesso:\nLogin: ${createdUser.email}\nSenha: ${createdUser.password}\n\nAcesse o sistema para começar a operar.\n\nAtenciosamente,\nEquipe Cropflow`,
+                body: `
+🌱 BEM-VINDO AO CROPFLOW
+==================================================
+
+Olá, ${createdUser.name}.
+
+Seu cadastro no sistema de gestão de pedidos foi realizado com sucesso.
+Abaixo estão suas credenciais de acesso:
+
+--------------------------------------------------
+📧 LOGIN : ${createdUser.email}
+🔑 SENHA : ${createdUser.password}
+--------------------------------------------------
+
+Para acessar, utilize o link do sistema.
+Recomendamos a troca da senha no primeiro acesso.
+
+Atenciosamente,
+Equipe Cropflow
+                `.trim(),
                 action: 'welcome_email'
             }).catch(err => console.error("Erro ao enviar email boas-vindas:", err));
         }
@@ -766,8 +809,18 @@ export const api = {
        updatedSol.motivo_rejeicao = `${prefixo}${motivoRejeicao}`;
        updatedSol.blocked_by = blockedByRole;
 
-       // Disparar E-mail de Notificação
-       const solicitante = localUsers.find(u => u.name === updatedSol.criado_por);
+       // Disparar E-mail de Notificação (SOMENTE AQUI - BLOQUEIO)
+       // Primeiro tenta buscar o usuário pelo nome (criado_por)
+       let solicitante = localUsers.find(u => u.name === updatedSol.criado_por);
+       
+       // Se não tiver email no usuário local ou não achar, tenta buscar do DB para garantir
+       if (!solicitante || !solicitante.email) {
+           try {
+               const { data } = await supabase.from('app_users').select('*').eq('name', updatedSol.criado_por).single();
+               if (data) solicitante = data as User;
+           } catch(e) { console.warn("Não foi possível buscar email do solicitante no DB."); }
+       }
+
        if (solicitante && solicitante.email) {
             const roleLabel = getRoleLabel(blockedByRole || user.role);
             const emailsToSend = [solicitante.email];
@@ -780,30 +833,39 @@ export const api = {
                 }
             }
 
-            // Envia para cada destinatário
+            // HTML Template para o E-mail de Bloqueio
+            const htmlContent = `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #334155;">
+                <div style="background-color: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+                   <h1 style="color: white; margin: 0; font-size: 24px;">🛑 Solicitação Bloqueada</h1>
+                </div>
+                <div style="border: 1px solid #e2e8f0; border-top: none; padding: 32px; border-radius: 0 0 12px 12px; background-color: #ffffff;">
+                   <p style="font-size: 16px; margin-bottom: 24px;">Olá,</p>
+                   <p style="margin-bottom: 24px; line-height: 1.5;">Informamos que a solicitação abaixo foi <strong>bloqueada</strong> pelo setor responsável.</p>
+                   
+                   <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                      <p style="margin: 5px 0;"><strong>Pedido:</strong> ${updatedSol.numero_pedido}</p>
+                      <p style="margin: 5px 0;"><strong>Cliente:</strong> ${updatedSol.nome_cliente}</p>
+                      <p style="margin: 5px 0;"><strong>Produto:</strong> ${updatedSol.nome_produto || 'N/A'}</p>
+                      <p style="margin: 5px 0;"><strong>Volume:</strong> ${updatedSol.volume_solicitado} ${updatedSol.unidade}</p>
+                   </div>
+
+                   <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; padding: 20px; border-radius: 4px;">
+                      <p style="margin: 0 0 8px 0; color: #991b1b; font-size: 12px; text-transform: uppercase; font-weight: bold;">Bloqueado por: ${roleLabel}</p>
+                      <p style="margin: 0; color: #7f1d1d; font-size: 16px;">${motivoRejeicao}</p>
+                   </div>
+                   
+                   <p style="margin-top: 32px; font-size: 14px; color: #94a3b8; text-align: center;">Acesse o sistema Cropflow para mais detalhes.</p>
+                </div>
+              </div>
+            `;
+
+            // Envia para cada destinatário com Layout HTML
             emailsToSend.forEach(emailAddr => {
                 sendEmailToScript({
                     to: emailAddr,
-                    subject: `🛑 BLOQUEIO: Pedido ${updatedSol.numero_pedido} - ${updatedSol.nome_cliente} - Motivo: ${motivoRejeicao.substring(0, 30)}...`,
-                    body: `
-                    Olá,
-
-                    A solicitação do pedido abaixo foi BLOQUEADA/REJEITADA.
-
-                    📦 Pedido: ${updatedSol.numero_pedido}
-                    👤 Cliente: ${updatedSol.nome_cliente}
-                    🏢 Setor Responsável: ${roleLabel}
-                    
-                    --------------------------------------
-                    ⚠️ MOTIVO DO BLOQUEIO:
-                    ${motivoRejeicao}
-                    --------------------------------------
-
-                    Acesse o sistema para regularizar a situação ou entre em contato com o setor responsável.
-
-                    Atenciosamente,
-                    Sistema Cropflow
-                    `,
+                    subject: `🛑 BLOQUEIO: Pedido ${updatedSol.numero_pedido} - ${updatedSol.nome_cliente}`,
+                    body: htmlContent, // Envia o HTML no corpo
                     action: 'block_notification'
                 }).catch(err => console.error("Falha ao enviar e-mail de bloqueio:", err));
             });
@@ -851,6 +913,8 @@ export const api = {
                  status: pedido.status
              }).eq('id', pedido.id);
          } catch(e) {}
+         
+         // REMOVIDO DISPARO DE EMAIL AQUI - APENAS BLOQUEIOS SÃO NOTIFICADOS
        }
     }
 
