@@ -104,19 +104,7 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
       const updatedPedidos = await api.getPedidos(user);
       setPedidos(updatedPedidos);
       
-      const newEvent: HistoricoEvento = {
-          id: `temp-${Date.now()}`,
-          pedido_id: pedido.id,
-          data_evento: new Date().toISOString(),
-          usuario: user.name,
-          setor: user.role,
-          acao: 'Solicitação Criada',
-          detalhes: `Volume: ${volNumber}`,
-          tipo: 'SUCESSO'
-      };
-      
-      setOrderHistory(prev => [newEvent, ...prev]);
-
+      // Atualiza listas de histórico e solicitações buscando do serviço (que já contem o novo registro)
       const history = await api.getSolicitacoesByPedido(pedido.id);
       setOrderSolicitacoes(history);
       

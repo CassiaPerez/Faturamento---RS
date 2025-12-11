@@ -736,11 +736,15 @@ export const api = {
     const mergedEvents = [...dbEvents];
     
     localEvents.forEach(localEvt => {
-        // Verifica se já existe um evento similar no DB (mesma data e ação)
-        // Isso evita duplicação visual quando o sync do DB é lento
+        // Verifica se já existe um evento similar no DB (mesma ação)
+        // Isso evita duplicação visual quando o sync do DB é lento ou quando o formato da data difere (ISO string vs timestamp)
+        // Usamos uma tolerância de 2 segundos para considerar o mesmo evento
         const exists = mergedEvents.some(dbEvt => 
             dbEvt.id === localEvt.id || 
-            (dbEvt.data_evento === localEvt.data_evento && dbEvt.acao === localEvt.acao)
+            (
+                dbEvt.acao === localEvt.acao && 
+                Math.abs(new Date(dbEvt.data_evento).getTime() - new Date(localEvt.data_evento).getTime()) < 2000
+            )
         );
         
         if (!exists) {
@@ -817,8 +821,9 @@ export const api = {
       console.error("Erro ao criar solicitação no DB (salvo localmente):", e.message || JSON.stringify(e));
     }
 
-    // FIX: Gravar evento na linha do tempo
-    await logEvento(pedidoId, user, 'Solicitação Criada', `Volume: ${volume} ${pedido.unidade}`, 'SUCESSO');
+    // FIX: Gravar evento na linha do tempo COM A OBSERVAÇÃO DO VENDEDOR
+    const detalhesLog = `Volume: ${volume} ${pedido.unidade}${obsVendedor ? ` | Obs: ${obsVendedor}` : ''}`;
+    await logEvento(pedidoId, user, 'Solicitação Criada', detalhesLog, 'SUCESSO');
   },
 
   updateSolicitacaoStatus: async (
@@ -965,13 +970,23 @@ export const api = {
         await supabase.from('solicitacoes').update(payload).eq('id', id);
     } catch(e) {}
 
-    // Log Evento
+    // Log Evento (ENRIQUECIDO COM OBSERVAÇÕES)
     const acaoLabel = status === StatusSolicitacao.EM_ANALISE ? 'Enviado para Análise' :
                       status === StatusSolicitacao.FATURADO ? 'Nota Fiscal Emitida' :
                       status === StatusSolicitacao.REJEITADO ? `Bloqueado (${blockedByRole || 'Geral'})` :
                       status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'Aprovado para Faturamento' : status;
     
-    await logEvento(updatedSol.pedido_id, user, acaoLabel, motivoRejeicao || extraData?.prazo ? `Prazo: ${extraData?.prazo}` : undefined, status === StatusSolicitacao.REJEITADO ? 'ALERTA' : 'SUCESSO');
+    let detalhesLog = motivoRejeicao;
+    
+    // Se estiver enviando para análise, incluir Prazo e Obs do Faturamento no log
+    if (status === StatusSolicitacao.EM_ANALISE && extraData) {
+        const parts = [];
+        if (extraData.prazo) parts.push(`Prazo: ${extraData.prazo}`);
+        if (extraData.obs_faturamento) parts.push(`Obs: ${extraData.obs_faturamento}`);
+        if (parts.length > 0) detalhesLog = parts.join(' | ');
+    }
+
+    await logEvento(updatedSol.pedido_id, user, acaoLabel, detalhesLog, status === StatusSolicitacao.REJEITADO ? 'ALERTA' : 'SUCESSO');
   },
 
   approveSolicitacaoStep: async (id: string, role: Role, user: User, obs?: string) => {
@@ -997,7 +1012,10 @@ export const api = {
     if (updatedSol.aprovacao_comercial && updatedSol.aprovacao_credito) {
         updatedSol.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
         updates.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
-        await logEvento(sol.pedido_id, user, 'Aprovado para Faturamento', 'Aprovação conjunta Comercial/Crédito concluída', 'SUCESSO');
+        
+        // Log de sucesso final (incluindo observação final se houver)
+        const obsFinal = obs ? ` | Obs Final: ${obs}` : '';
+        await logEvento(sol.pedido_id, user, 'Aprovado para Faturamento', `Aprovação conjunta Comercial/Crédito concluída${obsFinal}`, 'SUCESSO');
     } else {
         await logEvento(sol.pedido_id, user, `Aprovação Parcial (${role})`, obs, 'INFO');
     }
@@ -1014,16 +1032,50 @@ export const api = {
       const sol = localSolicitacoes.find(s => s.id === id);
       if (!sol) return;
   
+      let newStatus = StatusSolicitacao.PENDENTE;
+      let newAprovComercial = false;
+      let newAprovCredito = false;
+      let logMessage = 'Solicitação retornada para Triagem (Início)';
+
+      // LOGICA DE RETORNO BASEADA NO SETOR QUE BLOQUEOU
+      if (sol.blocked_by === Role.FATURAMENTO) {
+          // Bloqueio do Faturamento volta para o início (Triagem)
+          newStatus = StatusSolicitacao.PENDENTE;
+          newAprovComercial = false;
+          newAprovCredito = false;
+          logMessage = 'Desbloqueio Faturamento: Retornado para Triagem';
+      } 
+      else if (sol.blocked_by === Role.COMERCIAL) {
+          // Bloqueio do Comercial volta para Em Análise, mantendo aprovação do Crédito se existir
+          newStatus = StatusSolicitacao.EM_ANALISE;
+          newAprovComercial = false; // Reseta Comercial (precisa aprovar de novo)
+          newAprovCredito = sol.aprovacao_credito || false; // Mantém Crédito
+          logMessage = 'Desbloqueio Comercial: Retornado para Análise Comercial';
+      }
+      else if (sol.blocked_by === Role.CREDITO) {
+          // Bloqueio do Crédito volta para Em Análise, mantendo aprovação do Comercial se existir
+          newStatus = StatusSolicitacao.EM_ANALISE;
+          newAprovComercial = sol.aprovacao_comercial || false; // Mantém Comercial
+          newAprovCredito = false; // Reseta Crédito (precisa aprovar de novo)
+          logMessage = 'Desbloqueio Crédito: Retornado para Análise de Crédito';
+      }
+      else {
+          // Fallback (Admin ou sem bloqueio definido) - Reinicia tudo para garantir segurança
+          newStatus = StatusSolicitacao.PENDENTE;
+          newAprovComercial = false;
+          newAprovCredito = false;
+      }
+      
       const updates = {
-          status: StatusSolicitacao.PENDENTE,
+          status: newStatus,
           blocked_by: null, // Remove bloqueio
           motivo_rejeicao: null, // Limpa motivo
-          // Reset approvals to force re-evaluation if needed, or keep them? 
-          // Usually unblock means restarting triage or analysis. Let's restart to PENDENTE (Triage)
-          aprovacao_comercial: false,
-          aprovacao_credito: false,
-          obs_comercial: null,
-          obs_credito: null
+          aprovacao_comercial: newAprovComercial,
+          aprovacao_credito: newAprovCredito,
+          // Força reset da observação do setor que bloqueou para exigir nova análise limpa, 
+          // mas mantém a do outro setor.
+          obs_comercial: sol.blocked_by === Role.COMERCIAL ? null : sol.obs_comercial,
+          obs_credito: sol.blocked_by === Role.CREDITO ? null : sol.obs_credito
       };
       
       const index = localSolicitacoes.findIndex(s => s.id === id);
@@ -1035,7 +1087,7 @@ export const api = {
           await supabase.from('solicitacoes').update(updates).eq('id', id);
       } catch(e) {}
       
-      await logEvento(sol.pedido_id, user, 'Desbloqueio Manual', 'Solicitação retornada para Triagem', 'INFO');
+      await logEvento(sol.pedido_id, user, 'Desbloqueio Manual', logMessage, 'INFO');
   },
 
   getLogs: async (): Promise<LogSincronizacao[]> => {
