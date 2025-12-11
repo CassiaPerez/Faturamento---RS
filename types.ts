@@ -33,6 +33,7 @@ export interface User {
   email: string;
   manager_id?: string;
   password?: string;
+  sales_codes?: string[]; // Códigos do vendedor no ERP (pode ter mais de um)
 }
 
 export interface Pedido {

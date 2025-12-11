@@ -70,8 +70,6 @@ export const MOCK_USERS: User[] = [
   { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropflow.com', password: '123' },
   { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropflow.com', password: '123' },
   { id: 'u7', name: 'Analista Crédito', role: Role.CREDITO, email: 'credito@cropflow.com', password: '123' },
-  { id: 'u4', name: 'A. J. DEBONI & CIA LTDA', role: Role.VENDEDOR, email: 'deboni@cropflow.com', manager_id: 'u2', password: '123' },
-  { id: 'u5', name: 'DANTE LUIS DAMIANI', role: Role.VENDEDOR, email: 'dante@cropflow.com', manager_id: 'u2', password: '123' },
 ];
 let localUsers: User[] = loadFromStorage(STORAGE_KEYS.USERS, [...MOCK_USERS]);
 
@@ -99,10 +97,31 @@ const getRoleLabel = (role: Role | string) => {
   }
 };
 
+// --- FUNÇÃO CRÍTICA DE FILTRAGEM ---
+// Normaliza códigos para evitar erro de zeros à esquerda (ex: "085400" == "85400")
+const normalizeCode = (c: string | number | undefined) => {
+    if (!c) return '';
+    // Converte para string, remove espaços e remove zeros do início
+    return String(c).trim().replace(/^0+/, '');
+};
+
 const filterDataByRole = (data: Pedido[], user: User) => {
   if (user.role === Role.VENDEDOR) {
+    // 1. Prioridade: Filtrar por Códigos de Venda (Array) se existirem
+    if (user.sales_codes && user.sales_codes.length > 0) {
+        // Normaliza os códigos do usuário (remove zeros a esquerda)
+        const userCodes = user.sales_codes.map(normalizeCode);
+        
+        return data.filter(p => {
+            // Normaliza o código do pedido
+            const orderCode = normalizeCode(p.codigo_vendedor);
+            return userCodes.includes(orderCode);
+        });
+    }
+    // 2. Fallback: Filtrar por Nome (Legado)
     return data.filter(p => p.nome_vendedor && p.nome_vendedor.toLowerCase().includes(user.name.toLowerCase()));
   }
+  // Se for Gerente, Admin, etc, vê tudo
   return data;
 };
 
@@ -178,31 +197,61 @@ const parseCSV = (csvText: string): Pedido[] => {
     // Remove BOM se existir e espaços extras
     const cleanText = csvText.trim().replace(/^\uFEFF/, '');
     const lines = cleanText.split(/\r?\n/);
-    if (lines.length < 2) return [];
+    if (lines.length < 5) return [];
 
-    // Detecção automática de delimitador (Tab, Ponto e Vírgula ou Vírgula)
-    const firstLine = lines[0];
-    let delimiter = ',';
+    // Header Sniffing: Procura a linha de cabeçalho nas primeiras 20 linhas
+    let headerIndex = -1;
+    let delimiter = '';
+
+    // Palavras-chave obrigatórias para identificar o cabeçalho
+    const requiredKeywords = ['pedido', 'cliente']; 
     
-    if (firstLine.includes('\t')) delimiter = '\t';
-    else if (firstLine.includes(';')) delimiter = ';';
+    for(let i=0; i < Math.min(lines.length, 20); i++) {
+        const lineLower = lines[i].toLowerCase();
+        
+        // Tenta detectar delimitador na linha
+        const hasTab = lineLower.includes('\t');
+        const hasSemi = lineLower.includes(';');
+        const hasComma = lineLower.includes(',');
 
-    const headers = firstLine.toLowerCase().split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+        // Conta quantas palavras chave existem na linha
+        const matchCount = requiredKeywords.reduce((acc, keyword) => acc + (lineLower.includes(keyword) ? 1 : 0), 0);
+
+        if (matchCount >= 1) {
+             headerIndex = i;
+             if (hasTab) delimiter = '\t';
+             else if (hasSemi) delimiter = ';';
+             else delimiter = ','; // Default fallback
+             break;
+        }
+    }
+
+    if (headerIndex === -1) {
+        // Fallback: Assume linha 0 se não achar nada
+        headerIndex = 0;
+        delimiter = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+    }
+
+    const headers = lines[headerIndex].toLowerCase().split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
     
     // Função auxiliar para achar índice
     const getIdx = (keywords: string[]) => headers.findIndex(h => keywords.some(k => h.includes(k)));
 
     const idxNumero = getIdx(['numero', 'pedido', 'nro', 'doc', 'ordem']);
     const idxCliente = getIdx(['cliente', 'nome', 'parceiro']);
-    const idxProduto = getIdx(['produto', 'material', 'desc']);
+    // Expandido sinônimos para Produto
+    const idxProduto = getIdx(['produto', 'material', 'desc', 'item', 'mercadoria', 'especificacao', 'denominação']);
     const idxUnidade = getIdx(['unidade', 'und', 'un']);
     const idxVolume = getIdx(['volume', 'qtd', 'quantidade', 'saldo']);
     const idxValor = getIdx(['valor', 'total', 'montante', 'bruto']);
     const idxVendedor = getIdx(['vendedor', 'rep', 'representante']);
+    // Tenta achar coluna de código vendedor se existir
+    const idxCodVendedor = getIdx(['cod_vend', 'codigo_vendedor', 'cod.vend', 'cd_vend', 'vendedor_id']);
     
     const parsedPedidos: Pedido[] = [];
 
-    for (let i = 1; i < lines.length; i++) {
+    // Começa a ler APÓS a linha de cabeçalho detectada
+    for (let i = headerIndex + 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
@@ -224,10 +273,21 @@ const parseCSV = (csvText: string): Pedido[] => {
         const rawNumero = idxNumero >= 0 ? cols[idxNumero] : cols[0];
         const cliente = idxCliente >= 0 ? cols[idxCliente] : cols[1];
         
-        if (!rawNumero || !cliente || String(rawNumero).toLowerCase().includes('total')) continue;
+        // Ignora linhas de total, rodapé, paginação
+        const ignoreTerms = ['total', 'página', 'relatório', 'impresso', 'emitido'];
+        if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
         
-        const numero = String(rawNumero).trim();
-        const produto = idxProduto >= 0 ? cols[idxProduto] : (cols[2] || 'Produto Geral');
+        const numero = String(rawNumero).trim().replace(/\s/g, ''); // Remove espaços do número
+        
+        // Fallback robusto para Produto
+        let produto = 'Produto Geral';
+        if (idxProduto >= 0 && cols[idxProduto]) {
+             produto = cols[idxProduto];
+        } else if (cols[2] && cols[2].length > 3 && !cols[2].match(/^\d/)) {
+             // Tenta adivinhar coluna 2 se for texto longo e não número
+             produto = cols[2];
+        }
+
         const unidade = idxUnidade >= 0 ? cols[idxUnidade] : 'TN';
         
         const rawVol = idxVolume >= 0 ? cols[idxVolume] : cols[3];
@@ -235,9 +295,14 @@ const parseCSV = (csvText: string): Pedido[] => {
         
         const cleanNumber = (val: string) => {
             if (!val) return 0;
-            // Se tiver vírgula como decimal (formato BR)
-            if (val.includes(',') && (val.indexOf(',') > val.indexOf('.') || !val.includes('.'))) {
-                return parseFloat(val.replace(/\./g, '').replace(',', '.'));
+            // Se tiver vírgula como decimal (formato BR) e ponto como milhar
+            if (val.includes(',') && (val.indexOf('.') < val.indexOf(','))) {
+                 // Ex: 1.000,00 -> Remove ponto, troca virgula por ponto
+                 return parseFloat(val.replace(/\./g, '').replace(',', '.'));
+            }
+             // Se tiver apenas virgula (1000,00)
+            if (val.includes(',') && !val.includes('.')) {
+                return parseFloat(val.replace(',', '.'));
             }
             return parseFloat(val.replace(/[^\d.-]/g, ''));
         };
@@ -245,7 +310,25 @@ const parseCSV = (csvText: string): Pedido[] => {
         const volume = cleanNumber(rawVol);
         const valor = cleanNumber(rawVal);
         const vendedor = idxVendedor >= 0 ? cols[idxVendedor] : (cols[5] || 'Vendas Internas');
-        const codigoVendedor = '00' + (i % 10); 
+        
+        // Prioriza coluna explícita de código, senão gera um dummy ou tenta extrair
+        let codigoVendedor = '000';
+        if (idxCodVendedor >= 0 && cols[idxCodVendedor]) {
+            codigoVendedor = cols[idxCodVendedor].trim();
+        } else {
+            // Tenta extrair número de dentro do nome do vendedor (ex: "85400 - NOME" ou "NOME 85400")
+            // Procura sequência de 4 a 8 dígitos
+            const match = vendedor.match(/(\d{4,8})/);
+            if (match) {
+                codigoVendedor = match[1];
+            } else {
+                codigoVendedor = '000'; // Não encontrou código
+            }
+        }
+        
+        // Sanitização final do código
+        codigoVendedor = normalizeCode(codigoVendedor);
+
         const codigoCliente = 'C' + Math.floor(Math.random() * 1000);
 
         parsedPedidos.push({
@@ -253,7 +336,7 @@ const parseCSV = (csvText: string): Pedido[] => {
             numero_pedido: numero,
             codigo_cliente: codigoCliente,
             nome_cliente: cliente,
-            nome_produto: produto || 'Produto Geral',
+            nome_produto: produto,
             unidade: unidade || 'TN',
             volume_total: volume,
             volume_restante: volume,
@@ -461,7 +544,9 @@ export const api = {
         volume_restante: Number(p.volume_restante),
         volume_faturado: Number(p.volume_faturado || 0),
         valor_total: Number(p.valor_total),
-        valor_faturado: Number(p.valor_faturado || 0)
+        valor_faturado: Number(p.valor_faturado || 0),
+        // Garante que o código seja string para comparação correta
+        codigo_vendedor: normalizeCode(String(p.codigo_vendedor))
       })) as Pedido[];
 
       const validDbData = normalizedData.filter(p => !deletedIds.includes(String(p.id)));
@@ -528,14 +613,17 @@ export const api = {
       saveToStorage(STORAGE_KEYS.LOGS, []);
       saveToStorage(STORAGE_KEYS.DELETED_IDS, []);
 
-      // Limpa Supabase
+      // Limpa Supabase com UUID válido para evitar erro de sintaxe
+      const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
       try {
-          await supabase.from('solicitacoes').delete().neq('id', '0'); // Delete all
-          await supabase.from('historico_eventos').delete().neq('id', '0'); 
-          await supabase.from('app_logs').delete().neq('id', '0');
-          await supabase.from('pedidos').delete().neq('id', '0');
+          // Como temos ON DELETE CASCADE nas chaves estrangeiras, 
+          // deletar PEDIDOS deve limpar tudo. Mas por segurança limpamos os filhos antes.
+          try { await supabase.from('solicitacoes').delete().neq('id', ZERO_UUID); } catch(e) {}
+          try { await supabase.from('historico_eventos').delete().neq('id', ZERO_UUID); } catch(e) {}
+          try { await supabase.from('app_logs').delete().neq('id', '0'); } catch(e) {} // logs usa text id
+          try { await supabase.from('pedidos').delete().neq('id', '0'); } catch(e) {} // pedidos usa text id
       } catch (e) {
-          console.error("Erro ao limpar banco de dados:", e);
+          console.error("Erro ao limpar banco de dados (ignorando se já vazio):", e);
       }
   },
 
@@ -891,6 +979,8 @@ export const api = {
     
     // Lista de Proxies para tentar em ordem
     const proxies = [
+        // CodeTabs: Muito confiável para arquivos grandes, não corta dados
+        (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
         // AllOrigins: Retorna JSON com o conteúdo na propriedade 'contents'
         (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         // CorsProxy.io: Retorna o arquivo direto (Texto puro)
@@ -916,7 +1006,7 @@ export const api = {
                 csvText = await response.text();
             }
             
-            if (csvText && csvText.length > 0) break; // Sucesso, sai do loop
+            if (csvText && csvText.length > 50) break; // Sucesso, sai do loop (Length check to ensure not empty error msg)
         } catch (e) {
             console.warn(`Proxy falhou:`, e);
             lastError = e;
@@ -948,7 +1038,7 @@ export const api = {
         // 3. Processar CSV (Já temos o texto)
         const novosPedidos = parseCSV(csvText);
         
-        if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado no arquivo.");
+        if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado no arquivo (Verifique o formato).");
 
         // 4. Atualizar Base (Merge inteligente)
         let added = 0;
@@ -995,7 +1085,7 @@ export const api = {
 
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
-        // 5. Persistir no Banco (Upsert em lotes)
+        // 5. Persistir no Banco (Upsert em lotes pequenos com retry)
         try {
             const payload = localPedidos.map(p => {
                 const safePedido = { ...p };
@@ -1011,16 +1101,39 @@ export const api = {
                 };
             });
 
-            // Upsert em lotes de 100 para não estourar payload
-            const batchSize = 100;
+            // Upsert em lotes de 50 para não estourar payload e reduzir chance de timeout
+            const batchSize = 50;
+            
             for (let i = 0; i < payload.length; i += batchSize) {
                 const batch = payload.slice(i, i + batchSize);
-                const { error } = await supabase.from('pedidos').upsert(batch);
-                if (error) throw error;
+                
+                // Sistema de Retry (Tentativa Automática)
+                let attempts = 0;
+                const maxAttempts = 3;
+                let saved = false;
+                let lastError = null;
+
+                while (attempts < maxAttempts && !saved) {
+                    try {
+                        attempts++;
+                        const { error } = await supabase.from('pedidos').upsert(batch);
+                        if (error) throw error;
+                        saved = true;
+                    } catch (err: any) {
+                        lastError = err;
+                        console.warn(`Sync tentativa ${attempts} falhou para lote ${i}: ${err.message}. Tentando novamente...`);
+                        // Espera exponencial: 1s, 2s, 4s...
+                        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts - 1)));
+                    }
+                }
+
+                if (!saved && lastError) {
+                    throw lastError; // Se falhar 3x, aborta
+                }
             }
 
         } catch (e: any) {
-             throw new Error(`Erro ao salvar no Supabase: ${e.message}`);
+             throw new Error(`Erro ao salvar no Supabase: ${e.message || e}`);
         }
 
         // Log Sucesso

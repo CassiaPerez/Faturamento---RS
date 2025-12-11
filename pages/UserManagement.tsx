@@ -1,10 +1,11 @@
 
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, Role } from '../types';
 import { 
   Plus, Trash2, UserPlus, Shield, Mail, Search, BadgeCheck,
-  LayoutDashboard, ShoppingCart, FileText, Edit, TrendingUp, Banknote, Users, AlertCircle, Lock, CheckCircle
+  LayoutDashboard, ShoppingCart, FileText, Edit, TrendingUp, Banknote, Users, AlertCircle, Lock, CheckCircle, Hash
 } from 'lucide-react';
 
 const ROLE_DETAILS = {
@@ -30,6 +31,7 @@ const UserManagement: React.FC = () => {
     manager_id: '',
     password: '' // Campo de senha
   });
+  const [salesCodesInput, setSalesCodesInput] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -42,6 +44,7 @@ const UserManagement: React.FC = () => {
 
   const openCreateModal = () => {
     setNewUser({ name: '', email: '', role: Role.VENDEDOR, manager_id: '', password: '' });
+    setSalesCodesInput('');
     setEditingId(null);
     setError('');
     setIsModalOpen(true);
@@ -55,6 +58,7 @@ const UserManagement: React.FC = () => {
       manager_id: user.manager_id || '',
       password: '' // Não preenche a senha por segurança, usuário digita se quiser trocar
     });
+    setSalesCodesInput(user.sales_codes ? user.sales_codes.join(', ') : '');
     setEditingId(user.id);
     setError('');
     setIsModalOpen(true);
@@ -70,11 +74,18 @@ const UserManagement: React.FC = () => {
       return;
     }
 
+    // Processa os códigos de venda (Separa por vírgula e limpa espaços)
+    const sales_codes = salesCodesInput
+      .split(',')
+      .map(code => code.trim())
+      .filter(code => code.length > 0);
+
     const userPayload = {
       ...newUser,
       // Se estiver editando e senha estiver vazia, remove do payload para não sobrescrever
       password: (editingId && !newUser.password) ? undefined : newUser.password,
-      manager_id: newUser.role === Role.VENDEDOR ? newUser.manager_id : undefined 
+      manager_id: newUser.role === Role.VENDEDOR ? newUser.manager_id : undefined,
+      sales_codes: newUser.role === Role.VENDEDOR ? sales_codes : undefined
     };
 
     // Remover undefined properties
@@ -147,6 +158,7 @@ const UserManagement: React.FC = () => {
               <th className="px-6 py-4">Colaborador</th>
               <th className="px-6 py-4">Nível de Acesso</th>
               <th className="px-6 py-4">Gerente Responsável</th>
+              <th className="px-6 py-4">Códigos ERP</th>
               <th className="px-6 py-4 text-right">Ações</th>
             </tr>
           </thead>
@@ -187,6 +199,17 @@ const UserManagement: React.FC = () => {
                                 <span className="font-medium text-slate-700">{managerName}</span>
                             </div>
                         ) : <span className="text-slate-400 italic text-xs">Não vinculado</span>
+                     ) : <span className="text-slate-300">-</span>}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                     {user.sales_codes && user.sales_codes.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[150px]">
+                            {user.sales_codes.map((code, i) => (
+                                <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">
+                                    {code}
+                                </span>
+                            ))}
+                        </div>
                      ) : <span className="text-slate-300">-</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -251,35 +274,43 @@ const UserManagement: React.FC = () => {
 
               {/* Seletor de Gerente (Aparece apenas se for Vendedor) */}
               {newUser.role === Role.VENDEDOR && (
-                  <div className="space-y-2 bg-purple-50 p-4 rounded-xl border border-purple-100">
-                      <label className="block text-xs font-bold text-purple-800 uppercase flex items-center gap-2">
-                          <Users size={14} /> Vincular Gerente Responsável
-                      </label>
-                      <div className="relative">
-                        <select 
-                          className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium text-slate-700 cursor-pointer appearance-none"
-                          value={newUser.manager_id}
-                          onChange={e => setNewUser({...newUser, manager_id: e.target.value})}
-                        >
-                            <option value="">Selecione um Gerente...</option>
-                            {activeManagers.map(m => (
-                                <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-purple-500">
-                          <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                  <div className="space-y-4 bg-purple-50 p-4 rounded-xl border border-purple-100">
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-purple-800 uppercase flex items-center gap-2">
+                            <Users size={14} /> Vincular Gerente Responsável
+                        </label>
+                        <div className="relative">
+                            <select 
+                            className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium text-slate-700 cursor-pointer appearance-none"
+                            value={newUser.manager_id}
+                            onChange={e => setNewUser({...newUser, manager_id: e.target.value})}
+                            >
+                                <option value="">Selecione um Gerente...</option>
+                                {activeManagers.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-purple-500">
+                            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                            </div>
                         </div>
                       </div>
 
-                      {activeManagers.length === 0 ? (
-                         <p className="text-[10px] text-red-500 font-bold flex items-center gap-1">
-                           <AlertCircle size={10} /> Nenhum usuário "Gerente Comercial" cadastrado.
-                         </p>
-                      ) : (
-                         <p className="text-[10px] text-purple-600 mt-1">
-                           O gerente selecionado receberá cópias dos e-mails de bloqueio deste vendedor.
-                         </p>
-                      )}
+                      <div className="space-y-2 pt-2 border-t border-purple-200/50">
+                          <label className="block text-xs font-bold text-purple-800 uppercase flex items-center gap-2">
+                              <Hash size={14} /> Códigos de Venda (ERP)
+                          </label>
+                          <input 
+                              type="text"
+                              value={salesCodesInput}
+                              onChange={e => setSalesCodesInput(e.target.value)}
+                              placeholder="Ex: 001, 002, 055 (Separados por vírgula)"
+                              className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm font-mono text-slate-700 placeholder:font-sans"
+                          />
+                          <p className="text-[10px] text-purple-600">
+                              Insira os códigos do vendedor conforme constam no CSV/ERP. Permite múltiplos códigos separados por vírgula.
+                          </p>
+                      </div>
                   </div>
               )}
 
