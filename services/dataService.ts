@@ -137,8 +137,6 @@ const filterDataByRole = (data: Pedido[], user: User) => {
         return data.filter(p => {
             // Normaliza o código do pedido
             const orderCode = normalizeCode(p.codigo_vendedor);
-            // Log para debug se necessário
-            // console.log(`Comparando pedido ${p.numero_pedido}: ${orderCode} com userCodes: ${userCodes}`);
             return userCodes.includes(orderCode);
         });
     }
@@ -151,33 +149,35 @@ const filterDataByRole = (data: Pedido[], user: User) => {
 
 const logEvento = async (pedidoId: string, user: User, acao: string, detalhes?: string, tipo: 'SUCESSO' | 'ERRO' | 'INFO' | 'ALERTA' = 'INFO', forceLocal: boolean = false) => {
   const evento: any = {
+    // Se o banco gera UUID, não mandamos ID. Se for local, geramos temp.
     pedido_id: pedidoId,
     data_evento: new Date().toISOString(),
     usuario: user.name,
     setor: user.role,
     acao,
-    detalhes,
+    detalhes: detalhes || '',
     tipo
   };
 
-  const tempId = `temp-${Date.now()}`;
+  // Salva no estado de sessão (memória)
+  const tempId = `temp-${Date.now()}-${Math.random()}`;
   sessionEvents.push({ ...evento, id: tempId });
 
-  // Tenta salvar no DB, fallback para local
+  // Fallback Local Persistence
+  localHistorico.push({ ...evento, id: tempId });
+  saveToStorage(STORAGE_KEYS.HISTORICO, localHistorico);
+
+  // Tenta salvar no DB
   if (!forceLocal) {
     try {
       const { error } = await supabase.from('historico_eventos').insert(evento);
-      if (error) throw error;
-      return;
+      if (error) {
+        console.warn("Falha ao inserir evento no Supabase (mantido local):", error.message);
+      }
     } catch (e) {
       console.warn("Log evento offline:", e);
     }
   }
-
-  // Fallback Local Persistence
-  evento.id = `loc-${Date.now()}`;
-  localHistorico.push(evento);
-  saveToStorage(STORAGE_KEYS.HISTORICO, localHistorico);
 };
 
 // HELPER PRIVADO PARA ENVIO DE EMAIL
@@ -491,29 +491,30 @@ export const api = {
 
         // Dispara E-mail de Boas-Vindas
         if (createdUser.email && createdUser.password) {
+            // Template HTML de Boas-vindas
+            const htmlWelcome = `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                <div style="background-color: #0f172a; padding: 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Bem-vindo ao Cropflow</h1>
+                </div>
+                <div style="padding: 32px; background-color: #ffffff;">
+                    <p style="color: #334155; font-size: 16px; margin-bottom: 24px;">Olá, <strong>${createdUser.name}</strong>.</p>
+                    <p style="color: #334155; line-height: 1.6; margin-bottom: 24px;">Seu cadastro no sistema de gestão foi realizado com sucesso. Abaixo estão suas credenciais de acesso:</p>
+                    
+                    <div style="background-color: #f1f5f9; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                        <p style="margin: 8px 0; color: #475569; font-size: 14px;">📧 <strong>Login:</strong> ${createdUser.email}</p>
+                        <p style="margin: 8px 0; color: #475569; font-size: 14px;">🔑 <strong>Senha:</strong> ${createdUser.password}</p>
+                    </div>
+                    
+                    <a href="https://cropflow.app" style="display: block; width: 100%; padding: 12px 0; background-color: #2563eb; color: #ffffff; text-align: center; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Sistema</a>
+                </div>
+            </div>
+            `;
+
             sendEmailToScript({
                 to: createdUser.email,
                 subject: 'Bem-vindo ao Cropflow - Credenciais de Acesso',
-                body: `
-🌱 BEM-VINDO AO CROPFLOW
-==================================================
-
-Olá, ${createdUser.name}.
-
-Seu cadastro no sistema de gestão de pedidos foi realizado com sucesso.
-Abaixo estão suas credenciais de acesso:
-
---------------------------------------------------
-📧 LOGIN : ${createdUser.email}
-🔑 SENHA : ${createdUser.password}
---------------------------------------------------
-
-Para acessar, utilize o link do sistema.
-Recomendamos a troca da senha no primeiro acesso.
-
-Atenciosamente,
-Equipe Cropflow
-                `.trim(),
+                body: htmlWelcome,
                 action: 'welcome_email'
             }).catch(err => console.error("Erro ao enviar email boas-vindas:", err));
         }
@@ -717,11 +718,38 @@ Equipe Cropflow
   },
   
   getHistoricoPedido: async (pedidoId: string): Promise<HistoricoEvento[]> => {
+    let dbEvents: HistoricoEvento[] = [];
+    
+    // 1. Tenta buscar do DB
     try {
-        const { data } = await supabase.from('historico_eventos').select('*').eq('pedido_id', pedidoId).order('data_evento', { ascending: false });
-        if(data) return data as HistoricoEvento[];
-    } catch (e) {}
-    return localHistorico.filter(h => h.pedido_id === pedidoId).sort((a,b) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
+        const { data } = await supabase.from('historico_eventos').select('*').eq('pedido_id', pedidoId);
+        if(data) dbEvents = data as HistoricoEvento[];
+    } catch (e) {
+        console.warn("Erro ao buscar histórico do DB, usando local.", e);
+    }
+
+    // 2. Busca do LocalStorage
+    const localEvents = localHistorico.filter(h => h.pedido_id === pedidoId);
+
+    // 3. Mesclar listas (Removendo duplicatas baseadas no ID se possível, ou Timestamp)
+    // Priorizamos o que veio do banco, e adicionamos o local apenas se não existir
+    const mergedEvents = [...dbEvents];
+    
+    localEvents.forEach(localEvt => {
+        // Verifica se já existe um evento similar no DB (mesma data e ação)
+        // Isso evita duplicação visual quando o sync do DB é lento
+        const exists = mergedEvents.some(dbEvt => 
+            dbEvt.id === localEvt.id || 
+            (dbEvt.data_evento === localEvt.data_evento && dbEvt.acao === localEvt.acao)
+        );
+        
+        if (!exists) {
+            mergedEvents.push(localEvt);
+        }
+    });
+
+    // 4. Ordenação Final
+    return mergedEvents.sort((a,b) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
   },
 
   createSolicitacao: async (pedidoId: string, volume: number, user: User, obsVendedor: string) => {
@@ -788,6 +816,9 @@ Equipe Cropflow
       // Log detalhado para evitar "[object Object]"
       console.error("Erro ao criar solicitação no DB (salvo localmente):", e.message || JSON.stringify(e));
     }
+
+    // FIX: Gravar evento na linha do tempo
+    await logEvento(pedidoId, user, 'Solicitação Criada', `Volume: ${volume} ${pedido.unidade}`, 'SUCESSO');
   },
 
   updateSolicitacaoStatus: async (
