@@ -869,23 +869,11 @@ export const api = {
                    observacoes: updatedSol.obs_vendedor || updatedSol.obs_faturamento
                });
 
-               const emailBody = `
-                 Olá ${creatorUser.name}${managerUser ? ` (C/C: ${managerUser.name})` : ''},
-                 
-                 A solicitação de faturamento para o pedido ${updatedSol.numero_pedido} foi BLOQUEADA.
-                 
-                 Cliente: ${updatedSol.nome_cliente}
-                 Motivo: ${motivoRejeicao}
-                 Responsável pelo Bloqueio: ${user.name} (${getRoleLabel(user.role)})
-                 
-                 Por favor, verifique no sistema para mais detalhes.
-               `;
-               
                sendEmailToScript({
                    to: recipients.join(','),
                    subject: `🚫 Bloqueio: Pedido ${updatedSol.numero_pedido} - Cropflow`,
-                   body: emailBody,
-                   htmlBody: htmlContent, // Envia o HTML rico
+                   body: htmlContent,
+                   html: htmlContent,
                    action: 'notification'
                }).catch(err => console.error("Falha ao enviar email de bloqueio", err));
            }
@@ -1186,21 +1174,11 @@ export const api = {
                    rejectedItems: nomesRejeitados
                });
 
-               const emailBody = `
-                 Olá ${creatorUser.name}${managerUser ? ` (C/C: ${managerUser.name})` : ''},
-                 
-                 Houve uma REJEIÇÃO PARCIAL no pedido ${sol.numero_pedido} durante a conferência comercial.
-                 
-                 Itens Devolvidos: ${nomesRejeitados}
-                 Responsável: ${user.name}
-                 
-                 O restante do pedido segue aprovado.
-               `;
                sendEmailToScript({
                    to: recipients.join(','),
                    subject: `⚠️ Devolução Parcial: Pedido ${sol.numero_pedido} - Cropflow`,
-                   body: emailBody,
-                   htmlBody: htmlContent, // HTML formatado
+                   body: htmlContent,
+                   html: htmlContent,
                    action: 'notification'
                }).catch(err => console.error("Falha ao enviar email de bloqueio parcial", err));
             }
