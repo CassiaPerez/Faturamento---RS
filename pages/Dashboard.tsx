@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
-import { User, Pedido, Role, SolicitacaoFaturamento, StatusSolicitacao } from '../types';
-import { TrendingUp, Scale, Package, ChevronRight, AlertCircle, FileCheck, CheckCircle2, CalendarDays, History } from 'lucide-react';
+import { User, Pedido, Role, SolicitacaoFaturamento, StatusSolicitacao, StatusPedido } from '../types';
+import { TrendingUp, Scale, Package, ChevronRight, AlertCircle, FileCheck, CheckCircle2, CalendarDays, History, Clock, Ban } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -13,6 +13,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [historicoFaturado, setHistoricoFaturado] = useState<SolicitacaoFaturamento[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'history'>('overview');
 
   // Define se é um perfil de Backoffice (Que deve ver histórico ao invés de carteira)
   const isBackOffice = [Role.FATURAMENTO, Role.COMERCIAL, Role.CREDITO].includes(user.role);
@@ -148,73 +149,97 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
   }
 
   // --- RENDERIZAÇÃO PADRÃO (GERENTE, ADMIN, VENDEDOR) ---
-  
+
   const totalVolume = pedidos.reduce((acc, curr) => acc + curr.volume_total, 0);
   const totalPedidos = pedidos.length;
-  
+  const pedidosAtivos = pedidos.filter(p => p.status !== StatusPedido.FINALIZADO);
+  const pedidosFinalizados = pedidos.filter(p => p.status === StatusPedido.FINALIZADO);
+
   // Recent orders
   const recentOrders = [...pedidos]
     .sort((a, b) => new Date(b.data_criacao).getTime() - new Date(a.data_criacao).getTime())
     .slice(0, 15);
 
+  // Histórico completo (ordenado por data de criação)
+  const historicoCompleto = [...pedidos]
+    .sort((a, b) => new Date(b.data_criacao).getTime() - new Date(a.data_criacao).getTime());
+
   return (
     <div className="space-y-8 animate-fade-in pb-10">
-      
+
       <div>
          <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
            <Package className="text-brand-600" /> Dashboard Comercial
          </h2>
          <p className="text-slate-500 mt-1">
-           {user.role === Role.VENDEDOR 
-             ? `Visão da carteira de: ${user.name}` 
+           {user.role === Role.VENDEDOR
+             ? `Visão da carteira de: ${user.name}`
              : 'Visão gerencial de toda a carteira ativa.'}
          </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Quantity Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Package size={64} className="text-blue-600" />
-          </div>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600">
-              <Package size={24} />
-            </div>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Pedidos em Carteira</p>
-          </div>
-          <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{totalPedidos}</h3>
-          <div className="mt-4 flex items-center text-sm text-slate-500 font-medium">
-            <span className="bg-slate-100 px-2 py-0.5 rounded text-xs mr-2">Total</span>
-            Carteira Ativa
-          </div>
-        </div>
-
-        {/* Volume Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Scale size={64} className="text-indigo-600" />
-          </div>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
-              <Scale size={24} />
-            </div>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Volume Total</p>
-          </div>
-          <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{totalVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span className="text-xl text-slate-400 font-semibold">Vol/Qtd</span></h3>
-          <div className="mt-4 flex items-center text-sm text-emerald-600 font-bold">
-            <TrendingUp size={16} className="mr-1" />
-            <span>+12%</span> <span className="text-slate-400 font-medium ml-1">vs mês anterior</span>
-          </div>
-        </div>
+      {/* TABS DE NAVEGAÇÃO */}
+      <div className="flex gap-4 border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'overview' ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          <TrendingUp size={18} /> Visão Geral
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'history' ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          <History size={18} /> Histórico Completo ({pedidos.length})
+        </button>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 gap-8">
-        
-        {/* Recent Orders List (Full Width) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-[600px]">
+      {activeTab === 'overview' && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Quantity Card */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Package size={64} className="text-blue-600" />
+              </div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600">
+                  <Package size={24} />
+                </div>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Pedidos em Carteira</p>
+              </div>
+              <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{pedidosAtivos.length}</h3>
+              <div className="mt-4 flex items-center text-sm text-slate-500 font-medium">
+                <span className="bg-slate-100 px-2 py-0.5 rounded text-xs mr-2">Ativos</span>
+                <span className="text-emerald-600 font-bold">{pedidosFinalizados.length} finalizados</span>
+              </div>
+            </div>
+
+            {/* Volume Card */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Scale size={64} className="text-indigo-600" />
+              </div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
+                  <Scale size={24} />
+                </div>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Volume Total</p>
+              </div>
+              <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{totalVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span className="text-xl text-slate-400 font-semibold">Vol/Qtd</span></h3>
+              <div className="mt-4 flex items-center text-sm text-emerald-600 font-bold">
+                <TrendingUp size={16} className="mr-1" />
+                <span>+12%</span> <span className="text-slate-400 font-medium ml-1">vs mês anterior</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 gap-8">
+
+            {/* Recent Orders List (Full Width) */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-[600px]">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               Últimos Pedidos
@@ -266,7 +291,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             )}
           </div>
           <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-            <button 
+            <button
               onClick={() => onNavigate('orders')}
               className="text-sm font-bold text-brand-600 hover:text-brand-800 flex items-center justify-center gap-1 mx-auto transition-colors"
             >
@@ -275,6 +300,138 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
           </div>
         </div>
       </div>
+        </>
+      )}
+
+      {/* ABA: HISTÓRICO COMPLETO */}
+      {activeTab === 'history' && (
+        <div className="space-y-6">
+          {/* KPI Cards do Histórico */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-slate-100 rounded-lg">
+                  <Package size={20} className="text-slate-600" />
+                </div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Total Pedidos</p>
+              </div>
+              <h3 className="text-3xl font-extrabold text-slate-900">{pedidos.length}</h3>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-emerald-50 rounded-lg">
+                  <CheckCircle2 size={20} className="text-emerald-600" />
+                </div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Finalizados</p>
+              </div>
+              <h3 className="text-3xl font-extrabold text-emerald-600">{pedidosFinalizados.length}</h3>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <Clock size={20} className="text-blue-600" />
+                </div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Em Andamento</p>
+              </div>
+              <h3 className="text-3xl font-extrabold text-blue-600">{pedidosAtivos.length}</h3>
+            </div>
+          </div>
+
+          {/* Lista de Histórico Completo */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <History size={20} /> Histórico de Todos os Pedidos
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Visualização completa incluindo pedidos finalizados e em andamento</p>
+            </div>
+
+            <div className="overflow-y-auto max-h-[700px] custom-scrollbar">
+              {historicoCompleto.length > 0 ? (
+                <div className="divide-y divide-slate-100">
+                  {historicoCompleto.map((pedido) => {
+                    const isFinalizado = pedido.status === StatusPedido.FINALIZADO;
+                    const isBloqueado = pedido.motivo_status?.includes('BLOQUEIO');
+
+                    return (
+                      <div key={pedido.id} className={`p-5 hover:bg-slate-50 transition-colors ${isFinalizado ? 'bg-emerald-50/30' : ''} ${isBloqueado ? 'bg-red-50/30' : ''}`}>
+                        <div className="flex flex-col md:flex-row md:items-center gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-mono text-xs text-slate-500 font-bold bg-white px-2.5 py-1 rounded border border-slate-200">
+                                {pedido.numero_pedido}
+                              </span>
+
+                              {/* Badge de Status */}
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase border flex items-center gap-1 ${
+                                isFinalizado
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : isBloqueado
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : pedido.status === StatusPedido.AGUARDANDO_EMISSAO
+                                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}>
+                                {isFinalizado && <CheckCircle2 size={10} />}
+                                {isBloqueado && <Ban size={10} />}
+                                {!isFinalizado && !isBloqueado && <Clock size={10} />}
+                                {isFinalizado ? 'FINALIZADO' : isBloqueado ? 'BLOQUEADO' : pedido.status}
+                              </span>
+
+                              {/* Badge do Setor Atual */}
+                              {pedido.setor_atual && !isFinalizado && (
+                                <span className="text-[10px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded border border-slate-200">
+                                  📍 {pedido.setor_atual}
+                                </span>
+                              )}
+
+                              <span className="text-xs text-slate-400 flex items-center gap-1">
+                                <CalendarDays size={12} /> {new Date(pedido.data_criacao).toLocaleDateString('pt-BR')}
+                              </span>
+                            </div>
+
+                            <h4 className="font-bold text-slate-800 text-base mb-1">{pedido.nome_cliente}</h4>
+                            <p className="text-xs text-slate-500">{pedido.nome_produto}</p>
+
+                            {/* Mostra motivo se bloqueado */}
+                            {pedido.motivo_status && (
+                              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-xs text-red-700 font-medium">{pedido.motivo_status}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between md:justify-end gap-8">
+                            <div className="text-right">
+                              <p className="text-[10px] text-slate-400 uppercase font-bold">Volume</p>
+                              <p className="text-sm font-bold text-slate-700">{pedido.volume_total.toLocaleString('pt-BR')} {pedido.unidade}</p>
+                              <p className="text-[10px] text-emerald-600 font-bold">Faturado: {pedido.volume_faturado.toLocaleString('pt-BR')}</p>
+                            </div>
+
+                            <div className="text-right min-w-[120px]">
+                              <p className="text-[10px] text-slate-400 uppercase font-bold">Valor Total</p>
+                              <p className="text-lg font-bold text-slate-900">
+                                R$ {pedido.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-12 text-center flex flex-col items-center text-slate-400">
+                  <History size={48} className="opacity-20 mb-3" />
+                  <p>Nenhum histórico disponível.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

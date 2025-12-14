@@ -502,6 +502,74 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                 </table>
                             </div>
 
+                            {/* Timeline do Pedido */}
+                            {orderHistory.length > 0 && (
+                                <div className="mt-6">
+                                    <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4">
+                                        <History size={16} /> Linha do Tempo
+                                    </h4>
+                                    <div className="relative space-y-3 pl-6 border-l-2 border-slate-200">
+                                        {orderHistory.map((evento, idx) => {
+                                            const isBlocked = evento.tipo === 'ERRO' || evento.acao.includes('BLOQUEIO') || evento.acao.includes('REJEITADO');
+                                            const isSuccess = evento.tipo === 'SUCESSO';
+                                            const isWarning = evento.tipo === 'ALERTA';
+
+                                            let iconColor = 'bg-blue-500';
+                                            let bgColor = 'bg-blue-50';
+                                            let borderColor = 'border-blue-200';
+                                            let icon = <History size={12} />;
+
+                                            if (isBlocked) {
+                                                iconColor = 'bg-red-500';
+                                                bgColor = 'bg-red-50';
+                                                borderColor = 'border-red-200';
+                                                icon = <Ban size={12} />;
+                                            } else if (isSuccess) {
+                                                iconColor = 'bg-emerald-500';
+                                                bgColor = 'bg-emerald-50';
+                                                borderColor = 'border-emerald-200';
+                                                icon = <CheckCircle2 size={12} />;
+                                            } else if (isWarning) {
+                                                iconColor = 'bg-yellow-500';
+                                                bgColor = 'bg-yellow-50';
+                                                borderColor = 'border-yellow-200';
+                                                icon = <AlertTriangle size={12} />;
+                                            }
+
+                                            return (
+                                                <div key={evento.id} className="relative">
+                                                    <div className={`absolute -left-[1.6rem] w-6 h-6 rounded-full ${iconColor} flex items-center justify-center text-white shadow-md`}>
+                                                        {icon}
+                                                    </div>
+                                                    <div className={`bg-white border ${borderColor} rounded-lg p-3 shadow-sm hover:shadow-md transition-all`}>
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${bgColor} ${isBlocked ? 'text-red-700' : isSuccess ? 'text-emerald-700' : isWarning ? 'text-yellow-700' : 'text-blue-700'}`}>
+                                                                    {evento.setor}
+                                                                </span>
+                                                                {evento.usuario && (
+                                                                    <span className="text-[10px] text-slate-500 font-medium">por {evento.usuario}</span>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                                                <Clock size={10} />
+                                                                {new Date(evento.data_evento).toLocaleString('pt-BR')}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-sm font-bold text-slate-800 mb-1">{evento.acao}</p>
+                                                        {evento.detalhes && (
+                                                            <div className={`mt-2 p-2 rounded-lg ${bgColor} border ${borderColor}`}>
+                                                                <p className="text-xs text-slate-700 leading-relaxed">{evento.detalhes}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Solicitações Anteriores */}
                             {orderSolicitacoes.length > 0 && (
                                 <div className="mt-6">
@@ -521,7 +589,7 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                                     </span>
                                                     <span className="text-xs text-slate-400">{new Date(sol.data_solicitacao).toLocaleDateString()}</span>
                                                 </div>
-                                                
+
                                                 {/* Exibe detalhes dos itens solicitados se houver, ou resumo legado */}
                                                 {sol.itens_solicitados ? (
                                                     <ul className="text-xs space-y-1 mb-2">
@@ -536,10 +604,47 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                                     <p className="text-xs font-bold text-slate-700 mb-2">{sol.nome_produto}</p>
                                                 )}
 
-                                                {(sol.prazo_pedido || sol.obs_faturamento) && (
-                                                    <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                                        {sol.prazo_pedido && <div><span className="font-bold">Prazo:</span> {sol.prazo_pedido}</div>}
-                                                        {sol.obs_faturamento && <div><span className="font-bold">Obs Fat:</span> {sol.obs_faturamento}</div>}
+                                                {/* Mostra bloqueios/rejeições */}
+                                                {sol.motivo_rejeicao && (
+                                                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                                                        <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center gap-1">
+                                                            <Ban size={10} /> Motivo do Bloqueio/Rejeição
+                                                        </p>
+                                                        <p className="text-xs text-red-700">{sol.motivo_rejeicao}</p>
+                                                        {sol.blocked_by && (
+                                                            <p className="text-[10px] text-red-600 mt-1 italic">Bloqueado por: {sol.blocked_by}</p>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Comentários dos setores */}
+                                                {(sol.obs_vendedor || sol.obs_comercial || sol.obs_credito || sol.prazo_pedido || sol.obs_faturamento) && (
+                                                    <div className="mt-2 space-y-1.5">
+                                                        {sol.obs_vendedor && (
+                                                            <div className="text-xs bg-blue-50 border border-blue-100 p-2 rounded">
+                                                                <span className="font-bold text-blue-800">💬 Vendedor:</span> <span className="text-blue-700">{sol.obs_vendedor}</span>
+                                                            </div>
+                                                        )}
+                                                        {sol.obs_comercial && (
+                                                            <div className="text-xs bg-cyan-50 border border-cyan-100 p-2 rounded">
+                                                                <span className="font-bold text-cyan-800">💼 Comercial:</span> <span className="text-cyan-700">{sol.obs_comercial}</span>
+                                                            </div>
+                                                        )}
+                                                        {sol.obs_credito && (
+                                                            <div className="text-xs bg-purple-50 border border-purple-100 p-2 rounded">
+                                                                <span className="font-bold text-purple-800">💳 Crédito:</span> <span className="text-purple-700">{sol.obs_credito}</span>
+                                                            </div>
+                                                        )}
+                                                        {sol.prazo_pedido && (
+                                                            <div className="text-xs bg-slate-50 border border-slate-100 p-2 rounded">
+                                                                <span className="font-bold text-slate-700">📅 Prazo:</span> <span className="text-slate-600">{sol.prazo_pedido}</span>
+                                                            </div>
+                                                        )}
+                                                        {sol.obs_faturamento && (
+                                                            <div className="text-xs bg-orange-50 border border-orange-100 p-2 rounded">
+                                                                <span className="font-bold text-orange-800">📦 Faturamento:</span> <span className="text-orange-700">{sol.obs_faturamento}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                         </div>
