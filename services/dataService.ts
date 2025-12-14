@@ -191,154 +191,122 @@ const generateBlockEmailTemplate = (data: {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Pedido ${data.statusPedido}</title>
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <title>Notificação de ${data.statusPedido} - Cropflow</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-      <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5; padding: 40px 20px;">
+    <body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f5f5f5;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f5f5f5; padding: 20px 0;">
         <tr>
           <td align="center">
-            <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 
               <tr>
-                <td style="background-color: #dc2626; padding: 30px 40px; text-align: center;">
-                  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                      <td align="center">
-                        <div style="width: 64px; height: 64px; background-color: rgba(255, 255, 255, 0.2); border-radius: 50%; margin: 0 auto 16px;">
-                          <table role="presentation" style="width: 100%; height: 64px; border-collapse: collapse;">
-                            <tr>
-                              <td align="center" valign="middle" style="font-size: 36px;">⚠️</td>
-                            </tr>
-                          </table>
-                        </div>
-                        <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">
-                          Pedido ${data.statusPedido}
-                        </h1>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="background-color: #b91c1c; padding: 40px 30px; text-align: center;">
+                  <div style="font-size: 56px; line-height: 1; margin-bottom: 16px;">⚠️</div>
+                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                    PEDIDO ${data.statusPedido}
+                  </h1>
                 </td>
               </tr>
 
               <tr>
-                <td style="padding: 30px 40px 20px; text-align: center;">
-                  <span style="display: inline-block; background-color: #fef2f2; color: #dc2626; padding: 8px 20px; border-radius: 20px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; border: 2px solid #fee2e2;">
-                    ${data.statusPedido}
-                  </span>
+                <td style="padding: 0; background-color: #fee2e2;">
+                  <div style="background-color: #dc2626; color: #ffffff; padding: 12px 30px; text-align: center; font-weight: bold; font-size: 15px; text-transform: uppercase; letter-spacing: 0.8px;">
+                    🚫 AÇÃO NECESSÁRIA
+                  </div>
                 </td>
               </tr>
 
               <tr>
-                <td style="padding: 0 40px 30px;">
-                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border-radius: 6px; overflow: hidden;">
-                    <tr>
-                      <td style="padding: 20px; border-bottom: 1px solid #e5e7eb;">
-                        <h2 style="margin: 0 0 20px 0; color: #111827; font-size: 18px; font-weight: 600;">
-                          Dados do Pedido
-                        </h2>
-
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-                          <tr>
-                            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; font-weight: 500; width: 35%;">
-                              Número do Pedido:
-                            </td>
-                            <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600;">
-                              #${data.orderNumber}
-                            </td>
-                          </tr>
-                        </table>
-
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-                          <tr>
-                            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; font-weight: 500; width: 35%;">
-                              Cliente:
-                            </td>
-                            <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600;">
-                              ${data.clientName}
-                            </td>
-                          </tr>
-                        </table>
-
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-                          <tr>
-                            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; font-weight: 500; width: 35%;">
-                              Vendedor:
-                            </td>
-                            <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600;">
-                              ${data.vendedorName}
-                            </td>
-                          </tr>
-                        </table>
-
-                        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                          <tr>
-                            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; font-weight: 500; width: 35%;">
-                              Data:
-                            </td>
-                            <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600;">
-                              ${data.dataBloqueio}
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding: 30px 30px 20px;">
+                  <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 16px; line-height: 1.5;">
+                    Olá, <strong>${data.vendorName}</strong>
+                  </p>
+                  ${data.managerName ? `<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Gerente: <strong>${data.managerName}</strong></p>` : ''}
+                  <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.6;">
+                    Informamos que o pedido foi ${data.statusPedido.toLowerCase()} e requer sua atenção imediata para regularização.
+                  </p>
                 </td>
               </tr>
 
               <tr>
-                <td style="padding: 0 40px 30px;">
-                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #fef2f2; border-radius: 6px; border-left: 4px solid #dc2626; overflow: hidden;">
+                <td style="padding: 0 30px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
                     <tr>
                       <td style="padding: 20px;">
-                        <h2 style="margin: 0 0 16px 0; color: #dc2626; font-size: 18px; font-weight: 600;">
-                          Motivo do ${data.statusPedido}
+                        <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 16px; font-weight: bold; border-bottom: 2px solid #d1d5db; padding-bottom: 10px;">
+                          📋 DADOS DO PEDIDO
                         </h2>
 
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                           <tr>
-                            <td style="padding: 8px 0;">
-                              <span style="display: inline-block; background-color: #dc2626; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <td style="padding: 10px 0; color: #6b7280; font-size: 13px; width: 35%; vertical-align: top;">Número do Pedido:</td>
+                            <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: bold;">#${data.orderNumber}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0; color: #6b7280; font-size: 13px; vertical-align: top;">Cliente:</td>
+                            <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: bold;">${data.clientName}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0; color: #6b7280; font-size: 13px; vertical-align: top;">Vendedor:</td>
+                            <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: bold;">${data.vendedorName}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0; color: #6b7280; font-size: 13px; vertical-align: top;">Data:</td>
+                            <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: bold;">${data.dataBloqueio}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding: 0 30px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fef2f2; border-left: 4px solid #dc2626; border-radius: 6px;">
+                    <tr>
+                      <td style="padding: 20px;">
+                        <h2 style="margin: 0 0 16px 0; color: #dc2626; font-size: 16px; font-weight: bold;">
+                          🚫 MOTIVO DO ${data.statusPedido}
+                        </h2>
+
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom: 16px;">
+                          <tr>
+                            <td style="padding: 6px 0;">
+                              <span style="background-color: #dc2626; color: #ffffff; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
                                 ${data.setorBloqueio}
                               </span>
                             </td>
                           </tr>
                         </table>
 
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom: 16px;">
                           <tr>
-                            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; font-weight: 500;">
-                              Bloqueado por:
-                            </td>
+                            <td style="padding: 4px 0; color: #991b1b; font-size: 12px; font-weight: bold;">Bloqueado por:</td>
                           </tr>
                           <tr>
-                            <td style="padding: 4px 0; color: #111827; font-size: 14px; font-weight: 600;">
-                              ${data.blockerName}
-                            </td>
+                            <td style="padding: 4px 0; color: #7f1d1d; font-size: 14px; font-weight: bold;">${data.blockerName}</td>
                           </tr>
                         </table>
 
-                        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                          <tr>
-                            <td style="padding: 12px 16px; background-color: #ffffff; border-radius: 4px; color: #991b1b; font-size: 14px; line-height: 1.6; font-weight: 500;">
-                              ${data.reason}
-                            </td>
-                          </tr>
-                        </table>
+                        <div style="background-color: #ffffff; border: 1px solid #fecaca; border-radius: 4px; padding: 16px;">
+                          <p style="margin: 0; color: #991b1b; font-size: 14px; line-height: 1.6; font-weight: 500;">
+                            ${data.reason}
+                          </p>
+                        </div>
 
                         ${data.rejectedItems ? `
-                        <table role="presentation" style="width: 100%; border-collapse: collapse; margin-top: 16px; padding-top: 16px; border-top: 1px solid #fecaca;">
-                          <tr>
-                            <td style="padding: 8px 0; color: #991b1b; font-size: 13px; font-weight: 600;">
-                              Itens Afetados:
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding: 12px 16px; background-color: #ffffff; border-radius: 4px; color: #991b1b; font-size: 13px; line-height: 1.5;">
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #fecaca;">
+                          <p style="margin: 0 0 12px 0; color: #991b1b; font-size: 13px; font-weight: bold;">
+                            📦 ITENS REJEITADOS/AFETADOS:
+                          </p>
+                          <div style="background-color: #ffffff; border: 1px solid #fecaca; border-radius: 4px; padding: 14px;">
+                            <p style="margin: 0; color: #7f1d1d; font-size: 13px; line-height: 1.5; white-space: pre-line;">
                               ${data.rejectedItems}
-                            </td>
-                          </tr>
-                        </table>
+                            </p>
+                          </div>
+                        </div>
                         ` : ''}
                       </td>
                     </tr>
@@ -348,12 +316,12 @@ const generateBlockEmailTemplate = (data: {
 
               ${data.observacoes ? `
               <tr>
-                <td style="padding: 0 40px 30px;">
-                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; overflow: hidden;">
+                <td style="padding: 0 30px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;">
                     <tr>
                       <td style="padding: 16px 20px;">
-                        <p style="margin: 0 0 8px 0; color: #92400e; font-size: 13px; font-weight: 600;">
-                          Observações Adicionais:
+                        <p style="margin: 0 0 8px 0; color: #92400e; font-size: 13px; font-weight: bold;">
+                          💬 OBSERVAÇÕES ADICIONAIS:
                         </p>
                         <p style="margin: 0; color: #78350f; font-size: 13px; line-height: 1.5;">
                           ${data.observacoes}
@@ -366,19 +334,27 @@ const generateBlockEmailTemplate = (data: {
               ` : ''}
 
               <tr>
-                <td style="padding: 30px 40px; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
-                  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                      <td style="text-align: center;">
-                        <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 12px; line-height: 1.5;">
-                          Este é um e-mail automático. Por favor, não responda a esta mensagem.
-                        </p>
-                        <p style="margin: 0; color: #9ca3af; font-size: 11px;">
-                          © ${currentYear} CropFlow - Sistema de Gestão de Pedidos
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding: 0 30px 30px; text-align: center;">
+                  <div style="background-color: #fef9c3; border: 1px solid #fde047; border-radius: 6px; padding: 20px;">
+                    <p style="margin: 0 0 8px 0; color: #854d0e; font-size: 14px; font-weight: bold;">
+                      ⚡ AÇÃO NECESSÁRIA
+                    </p>
+                    <p style="margin: 0; color: #713f12; font-size: 13px; line-height: 1.5;">
+                      Acesse o sistema <strong>Cropflow</strong> e regularize as pendências do pedido para prosseguir com o processamento.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="background-color: #f9fafb; padding: 24px 30px; border-top: 1px solid #e5e7eb; text-align: center;">
+                  <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 12px; line-height: 1.5;">
+                    Este é um e-mail automático do sistema <strong>Cropflow</strong>.<br>
+                    Por favor, não responda a esta mensagem.
+                  </p>
+                  <p style="margin: 0; color: #9ca3af; font-size: 11px;">
+                    © ${currentYear} Cropflow - Sistema de Gestão de Pedidos
+                  </p>
                 </td>
               </tr>
 
