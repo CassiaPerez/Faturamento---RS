@@ -1,4 +1,4 @@
-import { Pedido, SolicitacaoFaturamento, LogSincronizacao, StatusPedido, StatusSolicitacao, Role, User, HistoricoEvento } from '../types';
+import { Pedido, PedidoItem, ItemSolicitado, SolicitacaoFaturamento, LogSincronizacao, StatusPedido, StatusSolicitacao, Role, User, HistoricoEvento } from '../types';
 import { supabase } from './supabaseClient';
 
 /* 
@@ -7,18 +7,17 @@ import { supabase } from './supabaseClient';
 */
 
 // --- MOCK DATA PARA INICIALIZAÇÃO OFFLINE ---
-// REMOVIDOS PEDIDOS DE EXEMPLO PARA INICIAR LIMPO
 const MOCK_PEDIDOS: Pedido[] = [];
 
 // --- STORAGE HELPERS ---
 const STORAGE_KEYS = {
-  PEDIDOS: 'cropflow_pedidos_v2',       // Atualizado v2 para limpar cache antigo
-  SOLICITACOES: 'cropflow_solicitacoes_v2', // Atualizado v2
-  HISTORICO: 'cropflow_historico_v2',   // Atualizado v2
-  LOGS: 'cropflow_logs_v2',             // Atualizado v2 para corrigir persistência
-  CONFIG: 'cropflow_config_v1',         // Mantém configurações (email/db)
-  DELETED_IDS: 'cropflow_deleted_ids_v2', // Atualizado v2
-  USERS: 'cropflow_users_v1'            // Cache local de usuários
+  PEDIDOS: 'cropflow_pedidos_v3',       // Atualizado v3 para nova estrutura de itens
+  SOLICITACOES: 'cropflow_solicitacoes_v2',
+  HISTORICO: 'cropflow_historico_v2',
+  LOGS: 'cropflow_logs_v2',
+  CONFIG: 'cropflow_config_v1',
+  DELETED_IDS: 'cropflow_deleted_ids_v2',
+  USERS: 'cropflow_users_v1'
 };
 
 const loadFromStorage = <T>(key: string, defaultData: T): T => {
@@ -95,7 +94,7 @@ export const MOCK_USERS: User[] = [
 ];
 let localUsers: User[] = loadFromStorage(STORAGE_KEYS.USERS, [...MOCK_USERS]);
 
-// Helper simples para UUID v4 (para compatibilidade caso crypto.randomUUID falhe ou DB exija UUID válido)
+// Helper simples para UUID v4
 const generateUUID = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
@@ -119,37 +118,34 @@ const getRoleLabel = (role: Role | string) => {
   }
 };
 
-// --- FUNÇÃO CRÍTICA DE FILTRAGEM ---
-// Normaliza códigos para evitar erro de zeros à esquerda (ex: "085400" == "85400")
 const normalizeCode = (c: string | number | undefined) => {
     if (!c) return '';
-    // Converte para string, remove espaços e remove zeros do início
     return String(c).trim().replace(/^0+/, '');
 };
 
+const cleanString = (val: any) => {
+    if (!val) return undefined;
+    const str = String(val).trim();
+    return str === '' ? undefined : str;
+};
+
+// Filter Data Logic
 const filterDataByRole = (data: Pedido[], user: User) => {
   if (user.role === Role.VENDEDOR) {
-    // 1. Prioridade: Filtrar por Códigos de Venda (Array) se existirem
     if (user.sales_codes && user.sales_codes.length > 0) {
-        // Normaliza os códigos do usuário (remove zeros a esquerda)
         const userCodes = user.sales_codes.map(normalizeCode);
-        
         return data.filter(p => {
-            // Normaliza o código do pedido
             const orderCode = normalizeCode(p.codigo_vendedor);
             return userCodes.includes(orderCode);
         });
     }
-    // 2. Fallback: Filtrar por Nome (Legado)
     return data.filter(p => p.nome_vendedor && p.nome_vendedor.toLowerCase().includes(user.name.toLowerCase()));
   }
-  // Se for Gerente, Admin, etc, vê tudo
   return data;
 };
 
 const logEvento = async (pedidoId: string, user: User, acao: string, detalhes?: string, tipo: 'SUCESSO' | 'ERRO' | 'INFO' | 'ALERTA' = 'INFO', forceLocal: boolean = false) => {
   const evento: any = {
-    // Se o banco gera UUID, não mandamos ID. Se for local, geramos temp.
     pedido_id: pedidoId,
     data_evento: new Date().toISOString(),
     usuario: user.name,
@@ -159,172 +155,264 @@ const logEvento = async (pedidoId: string, user: User, acao: string, detalhes?: 
     tipo
   };
 
-  // Salva no estado de sessão (memória)
   const tempId = `temp-${Date.now()}-${Math.random()}`;
   sessionEvents.push({ ...evento, id: tempId });
-
-  // Fallback Local Persistence
   localHistorico.push({ ...evento, id: tempId });
   saveToStorage(STORAGE_KEYS.HISTORICO, localHistorico);
 
-  // Tenta salvar no DB
   if (!forceLocal) {
     try {
       const { error } = await supabase.from('historico_eventos').insert(evento);
-      if (error) {
-        console.warn("Falha ao inserir evento no Supabase (mantido local):", error.message);
-      }
-    } catch (e) {
-      console.warn("Log evento offline:", e);
-    }
+      if (error) console.warn("Falha log supabase:", error.message);
+    } catch (e) { }
   }
 };
 
-// HELPER PRIVADO PARA ENVIO DE EMAIL
-const sendEmailToScript = async (payload: any) => {
-    // Verificação de conexão básica (Internet), não de banco de dados
-    if (!navigator.onLine) {
-        console.warn("Sem conexão com a internet para enviar e-mail.");
-        return false;
-    }
+// --- FUNÇÃO GERADORA DE TEMPLATE HTML PARA E-MAIL ---
+const generateBlockEmailTemplate = (data: {
+  vendorName: string;
+  managerName?: string;
+  orderNumber: string;
+  clientName: string;
+  reason: string;
+  blockerName: string;
+  blockerRole: string;
+  rejectedItems?: string;
+}) => {
+  const currentYear = new Date().getFullYear();
+  
+  return `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Notificação Cropflow</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Inter', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b; }
+        .wrapper { width: 100%; table-layout: fixed; background-color: #f1f5f9; padding-bottom: 40px; }
+        .webkit { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .header { background: linear-gradient(135deg, #15803d 0%, #166534 100%); padding: 32px 40px; text-align: center; }
+        .brand { color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin: 0; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .status-bar { background-color: #fee2e2; color: #991b1b; padding: 12px; text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #fecaca; }
+        .content { padding: 40px 40px 30px 40px; }
+        .greeting { font-size: 18px; color: #0f172a; margin-bottom: 8px; font-weight: 600; }
+        .intro { font-size: 15px; color: #64748b; line-height: 1.6; margin-top: 0; margin-bottom: 30px; }
+        
+        .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 25px; }
+        .info-row { padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .info-row:last-child { border-bottom: none; }
+        .info-col { width: 48%; }
+        .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
+        .value { font-size: 14px; font-weight: 600; color: #334155; margin: 0; display: block; }
+        
+        .reason-box { background-color: #fff1f2; border-left: 4px solid #f43f5e; padding: 25px; border-radius: 6px; margin-bottom: 30px; }
+        .reason-title { color: #be123c; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; }
+        .reason-text { color: #881337; font-size: 15px; line-height: 1.5; font-weight: 500; }
+        
+        .items-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #fecdd3; }
+        .items-title { font-size: 12px; font-weight: 700; color: #be123c; margin-bottom: 5px; }
+        .items-text { font-size: 13px; color: #9f1239; line-height: 1.4; background: rgba(255,255,255,0.5); padding: 8px; border-radius: 4px; }
 
+        .btn-container { text-align: center; margin-top: 10px; margin-bottom: 10px; }
+        .btn { display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 50px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); transition: all 0.2s; }
+        
+        .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 30px; text-align: center; }
+        .footer-text { font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+        .footer-sub { font-size: 11px; color: #cbd5e1; }
+        
+        /* Mobile fixes */
+        @media only screen and (max-width: 600px) {
+          .info-row { display: block; }
+          .info-col { width: 100%; margin-bottom: 15px; }
+          .info-col:last-child { margin-bottom: 0; }
+          .content { padding: 30px 20px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="wrapper">
+        <div class="webkit">
+          <div class="header">
+            <h1 class="brand">CROPFLOW</h1>
+          </div>
+          
+          <div class="status-bar">
+            ⚠️ Pedido Bloqueado / Devolvido
+          </div>
+          
+          <div class="content">
+            <p class="greeting">Olá, ${data.vendorName}</p>
+            ${data.managerName ? `<p style="font-size:12px; color:#94a3b8; margin-top:-5px; margin-bottom:15px;">(Cópia para: ${data.managerName})</p>` : ''}
+            
+            <p class="intro">Identificamos uma pendência que impede o prosseguimento do faturamento. Por favor, verifique os detalhes abaixo e tome as providências necessárias.</p>
+            
+            <div class="info-card">
+              <div class="info-row">
+                <div class="info-col">
+                  <span class="label">Número do Pedido</span>
+                  <span class="value" style="font-family: monospace; font-size: 15px;">${data.orderNumber}</span>
+                </div>
+                <div class="info-col">
+                  <span class="label">Cliente</span>
+                  <span class="value">${data.clientName}</span>
+                </div>
+              </div>
+              <div class="info-row">
+                <div class="info-col">
+                  <span class="label">Bloqueado Por</span>
+                  <span class="value">${data.blockerName}</span>
+                </div>
+                <div class="info-col">
+                  <span class="label">Setor Responsável</span>
+                  <span class="value" style="color: #ef4444;">${data.blockerRole}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="reason-box">
+              <div class="reason-title">
+                Motivo da Devolução
+              </div>
+              <div class="reason-text">
+                ${data.reason}
+              </div>
+              
+              ${data.rejectedItems ? `
+                <div class="items-section">
+                  <div class="items-title">Itens Afetados:</div>
+                  <div class="items-text">${data.rejectedItems}</div>
+                </div>
+              ` : ''}
+            </div>
+
+            <div class="btn-container">
+              <a href="https://cropflow-app.vercel.app/" class="btn">Acessar Sistema para Corrigir</a>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p class="footer-text">&copy; ${currentYear} Grupo Cropfield. Todos os direitos reservados.</p>
+            <p class="footer-sub">Mensagem automática gerada pelo sistema Cropflow.</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+const sendEmailToScript = async (payload: any) => {
+    if (!navigator.onLine) return false;
     try {
-        console.log("Tentando enviar email para Script:", googleScriptUrl, payload);
-        // Utiliza no-cors para evitar bloqueio do navegador (status 0 é esperado)
         await fetch(googleScriptUrl, { 
             method: 'POST', 
             mode: 'no-cors', 
-            headers: { 
-                'Content-Type': 'text/plain;charset=utf-8' 
-            },
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload) 
         });
         return true;
     } catch (e) {
-        console.error("Erro crítico ao fazer fetch do email:", e);
         return false;
     }
 };
 
-// HELPER: Convert Drive URL to Direct Download Link
 const convertDriveLink = (url: string): string => {
-    // Tenta extrair ID de vários formatos
     const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (idMatch && idMatch[1]) {
-        return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
-    }
+    if (idMatch && idMatch[1]) return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
     return url;
 };
 
-// HELPER: Parse CSV/TXT string to Pedidos
+// --- NOVO PARSER COM SUPORTE A ITENS ---
 const parseCSV = (csvText: string): Pedido[] => {
-    // Remove BOM se existir e espaços extras
     const cleanText = csvText.trim().replace(/^\uFEFF/, '');
     const lines = cleanText.split(/\r?\n/);
     if (lines.length < 5) return [];
 
-    // Header Sniffing: Procura a linha de cabeçalho nas primeiras 20 linhas
     let headerIndex = -1;
     let delimiter = '';
-
-    // Palavras-chave obrigatórias para identificar o cabeçalho
     const requiredKeywords = ['pedido', 'cliente']; 
     
     for(let i=0; i < Math.min(lines.length, 20); i++) {
         const lineLower = lines[i].toLowerCase();
-        
-        // Tenta detectar delimitador na linha
         const hasTab = lineLower.includes('\t');
         const hasSemi = lineLower.includes(';');
         const hasComma = lineLower.includes(',');
-
-        // Conta quantas palavras chave existem na linha
         const matchCount = requiredKeywords.reduce((acc, keyword) => acc + (lineLower.includes(keyword) ? 1 : 0), 0);
 
         if (matchCount >= 1) {
              headerIndex = i;
-             if (hasTab) delimiter = '\t';
-             else if (hasSemi) delimiter = ';';
-             else delimiter = ','; // Default fallback
+             delimiter = hasTab ? '\t' : (hasSemi ? ';' : ',');
              break;
         }
     }
 
     if (headerIndex === -1) {
-        // Fallback: Assume linha 0 se não achar nada
         headerIndex = 0;
         delimiter = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
     }
 
     const headers = lines[headerIndex].toLowerCase().split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
-    
-    // Função auxiliar para achar índice
     const getIdx = (keywords: string[]) => headers.findIndex(h => keywords.some(k => h.includes(k)));
 
-    const idxNumero = getIdx(['numero', 'pedido', 'nro', 'doc', 'ordem']);
+    // MAPA DE COLUNAS - APRIMORADO
+    const idxNumero = getIdx(['numero', 'pedido', 'nro', 'doc', 'ordem', 'nr_pedido']);
     const idxCliente = getIdx(['cliente', 'nome', 'parceiro']);
-    // Expandido sinônimos para Produto
-    const idxProduto = getIdx(['produto', 'material', 'desc', 'item', 'mercadoria', 'especificacao', 'denominação']);
+    
+    // CRÍTICO: Remover 'item' genérico para evitar match com 'COD_ITEM'
+    // Priorizar 'descricao', 'descrição', 'produto', 'material'
+    const idxProduto = getIdx(['descricao', 'descrição', 'produto', 'material', 'especificacao', 'mercadoria', 'texto']);
+    
     const idxUnidade = getIdx(['unidade', 'und', 'un']);
     const idxVolume = getIdx(['volume', 'qtd', 'quantidade', 'saldo']);
-    const idxValor = getIdx(['valor', 'total', 'montante', 'bruto']);
+    const idxValor = getIdx(['valor', 'total', 'montante', 'bruto', 'liquido']);
     const idxVendedor = getIdx(['vendedor', 'rep', 'representante']);
-    // Tenta achar coluna de código vendedor se existir
     const idxCodVendedor = getIdx(['cod_vend', 'codigo_vendedor', 'cod.vend', 'cd_vend', 'vendedor_id']);
     
-    const parsedPedidos: Pedido[] = [];
+    // Map para agrupar itens pelo número do pedido
+    const pedidosMap = new Map<string, Pedido>();
 
-    // Começa a ler APÓS a linha de cabeçalho detectada
     for (let i = headerIndex + 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        // Split inteligente baseado no delimitador detectado
         let cols: string[];
-        
-        if (delimiter === '\t') {
-             // Arquivos TXT tabulados geralmente não usam aspas, split simples
-             cols = line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
-        } else if (delimiter === ';') {
-             cols = line.split(';').map(c => c.trim().replace(/^"|"$/g, ''));
-        } else {
-             // Regex para CSV padrão com vírgula e aspas
-             cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
-        }
+        if (delimiter === '\t') cols = line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
+        else if (delimiter === ';') cols = line.split(';').map(c => c.trim().replace(/^"|"$/g, ''));
+        else cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
 
         if (cols.length < 3) continue;
 
         const rawNumero = idxNumero >= 0 ? cols[idxNumero] : cols[0];
         const cliente = idxCliente >= 0 ? cols[idxCliente] : cols[1];
         
-        // Ignora linhas de total, rodapé, paginação
         const ignoreTerms = ['total', 'página', 'relatório', 'impresso', 'emitido'];
         if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
         
-        const numero = String(rawNumero).trim().replace(/\s/g, ''); // Remove espaços do número
+        const numeroPedido = String(rawNumero).trim().replace(/\s/g, '');
         
-        // Fallback robusto para Produto
+        // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
         let produto = 'Produto Geral';
-        if (idxProduto >= 0 && cols[idxProduto]) {
-             produto = cols[idxProduto];
-        } else if (cols[2] && cols[2].length > 3 && !cols[2].match(/^\d/)) {
-             // Tenta adivinhar coluna 2 se for texto longo e não número
-             produto = cols[2];
+        if (idxProduto >= 0 && cols[idxProduto] && cols[idxProduto].trim()) {
+             produto = cols[idxProduto].trim();
+        } else if (cols.length > 16 && cols[16] && cols[16].length > 3) {
+             // Tenta pegar a coluna 16 (DESCRICAO no arquivo de exemplo)
+             produto = cols[16].trim();
+        } else if (cols[2] && cols[2].length > 5 && !cols[2].match(/^\d/)) {
+             // Fallback legado
+             produto = cols[2].trim();
         }
 
         const unidade = idxUnidade >= 0 ? cols[idxUnidade] : 'TN';
-        
         const rawVol = idxVolume >= 0 ? cols[idxVolume] : cols[3];
         const rawVal = idxValor >= 0 ? cols[idxValor] : cols[4];
         
         const cleanNumber = (val: string) => {
             if (!val) return 0;
-            // Se tiver vírgula como decimal (formato BR) e ponto como milhar
             if (val.includes(',') && (val.indexOf('.') < val.indexOf(','))) {
-                 // Ex: 1.000,00 -> Remove ponto, troca virgula por ponto
                  return parseFloat(val.replace(/\./g, '').replace(',', '.'));
             }
-             // Se tiver apenas virgula (1000,00)
             if (val.includes(',') && !val.includes('.')) {
                 return parseFloat(val.replace(',', '.'));
             }
@@ -335,71 +423,101 @@ const parseCSV = (csvText: string): Pedido[] => {
         const valor = cleanNumber(rawVal);
         const vendedor = idxVendedor >= 0 ? cols[idxVendedor] : (cols[5] || 'Vendas Internas');
         
-        // Prioriza coluna explícita de código, senão gera um dummy ou tenta extrair
+        // Código Vendedor Logic
         let codigoVendedor = '000';
         if (idxCodVendedor >= 0 && cols[idxCodVendedor]) {
             codigoVendedor = cols[idxCodVendedor].trim();
         } else {
-            // Tenta extrair número de dentro do nome do vendedor (ex: "85400 - NOME" ou "NOME 85400")
-            // Procura sequência de 4 a 8 dígitos
             const match = vendedor.match(/(\d{4,8})/);
-            if (match) {
-                codigoVendedor = match[1];
-            } else {
-                codigoVendedor = '000'; // Não encontrou código
-            }
+            if (match) codigoVendedor = match[1];
         }
-        
-        // Sanitização final do código
         codigoVendedor = normalizeCode(codigoVendedor);
 
-        const codigoCliente = 'C' + Math.floor(Math.random() * 1000);
+        // --- GROUPING LOGIC ---
+        // Se o pedido já existe, adiciona item. Se não, cria.
+        if (pedidosMap.has(numeroPedido)) {
+            const existingPedido = pedidosMap.get(numeroPedido)!;
+            
+            // Adiciona novo item
+            existingPedido.itens.push({
+                id: `${numeroPedido}-${existingPedido.itens.length + 1}`,
+                nome_produto: produto,
+                unidade: unidade,
+                volume_total: volume,
+                volume_restante: volume, // Inicialmente igual ao total
+                volume_faturado: 0,
+                valor_total: valor,
+                valor_unitario: volume > 0 ? valor / volume : 0
+            });
 
-        parsedPedidos.push({
-            id: numero,
-            numero_pedido: numero,
-            codigo_cliente: codigoCliente,
-            nome_cliente: cliente,
-            nome_produto: produto,
-            unidade: unidade || 'TN',
-            volume_total: volume,
-            volume_restante: volume,
-            volume_faturado: 0,
-            valor_total: valor,
-            valor_faturado: 0,
-            codigo_vendedor: codigoVendedor,
-            nome_vendedor: vendedor,
-            status: StatusPedido.PENDENTE,
-            data_criacao: new Date().toISOString()
-        });
+            // Atualiza totais do cabeçalho
+            existingPedido.volume_total += volume;
+            existingPedido.volume_restante += volume;
+            existingPedido.valor_total += valor;
+            
+            // Atualiza resumo de produtos se for diferente
+            if (!existingPedido.nome_produto.includes('Mix') && existingPedido.nome_produto !== produto) {
+                existingPedido.nome_produto = "Mix de Produtos";
+            }
+
+        } else {
+            // Novo Pedido
+            const novoPedido: Pedido = {
+                id: numeroPedido,
+                numero_pedido: numeroPedido,
+                codigo_cliente: 'C' + Math.floor(Math.random() * 1000),
+                nome_cliente: cliente,
+                nome_produto: produto, // Primeiro produto
+                unidade: unidade,
+                
+                // Totais iniciais
+                volume_total: volume,
+                volume_restante: volume,
+                volume_faturado: 0,
+                valor_total: valor,
+                valor_faturado: 0,
+                
+                codigo_vendedor: codigoVendedor,
+                nome_vendedor: vendedor,
+                status: StatusPedido.PENDENTE,
+                data_criacao: new Date().toISOString(),
+                
+                // Array de itens inicial
+                itens: [{
+                    id: `${numeroPedido}-1`,
+                    nome_produto: produto,
+                    unidade: unidade,
+                    volume_total: volume,
+                    volume_restante: volume,
+                    volume_faturado: 0,
+                    valor_total: valor,
+                    valor_unitario: volume > 0 ? valor / volume : 0
+                }]
+            };
+            pedidosMap.set(numeroPedido, novoPedido);
+        }
     }
-    return parsedPedidos;
+    
+    return Array.from(pedidosMap.values());
 };
 
 export const api = {
   checkConnection: async (): Promise<boolean> => {
     try {
-      // Check tables to attempt schema cache refresh
       await supabase.from('pedidos').select('id').limit(1);
       await supabase.from('app_users').select('id').limit(1);
       return true;
-    } catch (e) { 
-      console.error("Erro conexão Supabase (ou Schema Cache):", e);
-      return false; 
-    }
+    } catch (e) { return false; }
   },
   
   login: async (email: string, password: string): Promise<User> => {
-      // Backdoor Admin Local
       if (email.trim() === 'administrador@grupocropfield.com.br' && password === 'Cp261121@!') {
         return { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: email };
       }
-      
       try {
         const { data, error } = await supabase.from('app_users').select('*').eq('email', email).eq('password', password).single();
         if (!error && data) {
             const user = data as User;
-            // Atualiza cache local
             const existingIdx = localUsers.findIndex(u => u.id === user.id);
             if (existingIdx !== -1) localUsers[existingIdx] = user;
             else localUsers.push(user);
@@ -407,422 +525,226 @@ export const api = {
             return user;
         }
       } catch (e) {}
-      
       const user = localUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (user && (!user.password || user.password === password)) return user;
-      
       throw new Error('Credenciais inválidas.');
   },
   
   getSystemConfig: async () => { 
-    const isConnected = await api.checkConnection();
     return { 
       supabaseUrl: 'https://vvmztpnxpndoaeepxztj.supabase.co', 
       emailServiceUrl: googleScriptUrl, 
       csvUrl: currentConfig.csvUrl || '',
-      dbConnected: isConnected 
+      dbConnected: await api.checkConnection()
     }; 
   },
   
   updateSystemConfig: async (config: any) => { 
-    if(config.emailServiceUrl) {
-        googleScriptUrl = config.emailServiceUrl;
-    }
-    
-    currentConfig = {
-        ...currentConfig,
-        emailServiceUrl: config.emailServiceUrl || currentConfig.emailServiceUrl,
-        csvUrl: config.csvUrl || ''
-    };
-    
+    if(config.emailServiceUrl) googleScriptUrl = config.emailServiceUrl;
+    currentConfig = { ...currentConfig, emailServiceUrl: config.emailServiceUrl || currentConfig.emailServiceUrl, csvUrl: config.csvUrl || '' };
     saveToStorage(STORAGE_KEYS.CONFIG, currentConfig);
     return true; 
   },
   
   sendTestEmail: async (email: string) => { 
-    const payload = {
-        action: 'test_email',
-        to: email,
-        subject: 'Teste de Configuração Cropflow',
-        body: 'Se você recebeu este e-mail, a integração com o Google Apps Script está funcionando corretamente.'
-    };
-    
-    const sent = await sendEmailToScript(payload);
-    
-    if (sent) {
-        return { success: true, message: "Comando enviado (Verifique sua caixa de entrada/spam)" };
-    } else {
-        return { success: false, message: "Falha ao conectar com o serviço de e-mail." };
-    }
+    const sent = await sendEmailToScript({ action: 'test_email', to: email, subject: 'Teste Cropflow', body: 'Teste de integração.' });
+    return { success: sent, message: sent ? "Comando enviado" : "Falha na conexão" };
   },
   
   getUsers: async () => { 
     try {
-        const { data, error } = await supabase.from('app_users').select('*').order('name');
-        if (!error && data) {
+        const { data } = await supabase.from('app_users').select('*').order('name');
+        if (data) {
             localUsers = data as User[];
             saveToStorage(STORAGE_KEYS.USERS, localUsers);
-            return localUsers;
         }
-    } catch (e) {
-        console.warn("Erro ao buscar usuários do DB, usando cache local.");
-    }
+    } catch (e) {}
     return localUsers; 
   },
 
   createUser: async (user: any) => { 
-    const newUser = { ...user };
-    
-    // Garante um ID compatível com UUID v4 para PostgreSQL
-    if (!newUser.id) {
-        newUser.id = generateUUID();
-    }
-
+    const newUser = { ...user, id: user.id || generateUUID() };
     try {
-        // Salva no Banco de Dados
         const { data, error } = await supabase.from('app_users').insert(newUser).select().single();
         if (error) throw error;
-        
-        const createdUser = data || newUser;
-
-        // Atualiza Cache Local
-        localUsers.push(createdUser);
+        localUsers.push(data || newUser);
         saveToStorage(STORAGE_KEYS.USERS, localUsers);
-
-        // Dispara E-mail de Boas-Vindas
-        if (createdUser.email && createdUser.password) {
-            // Template HTML de Boas-vindas
-            const htmlWelcome = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-                <div style="background-color: #0f172a; padding: 24px; text-align: center;">
-                    <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Bem-vindo ao Cropflow</h1>
-                </div>
-                <div style="padding: 32px; background-color: #ffffff;">
-                    <p style="color: #334155; font-size: 16px; margin-bottom: 24px;">Olá, <strong>${createdUser.name}</strong>.</p>
-                    <p style="color: #334155; line-height: 1.6; margin-bottom: 24px;">Seu cadastro no sistema de gestão foi realizado com sucesso. Abaixo estão suas credenciais de acesso:</p>
-                    
-                    <div style="background-color: #f1f5f9; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
-                        <p style="margin: 8px 0; color: #475569; font-size: 14px;">📧 <strong>Login:</strong> ${createdUser.email}</p>
-                        <p style="margin: 8px 0; color: #475569; font-size: 14px;">🔑 <strong>Senha:</strong> ${createdUser.password}</p>
-                    </div>
-                    
-                    <a href="https://cropflow.app" style="display: block; width: 100%; padding: 12px 0; background-color: #2563eb; color: #ffffff; text-align: center; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Sistema</a>
-                </div>
-            </div>
-            `;
-
-            sendEmailToScript({
-                to: createdUser.email,
-                subject: 'Bem-vindo ao Cropflow - Credenciais de Acesso',
-                body: htmlWelcome,
-                action: 'welcome_email'
-            }).catch(err => console.error("Erro ao enviar email boas-vindas:", err));
-        }
-
-        return createdUser;
-    } catch (e: any) {
-        const errorMsg = e.message || JSON.stringify(e);
-        console.error("Erro ao criar usuário no banco (Salvando Localmente):", errorMsg);
         
-        // Fallback local se DB falhar - Garante que o usuário é salvo
-        if (!localUsers.find(u => u.id === newUser.id)) {
-            localUsers.push(newUser);
-            saveToStorage(STORAGE_KEYS.USERS, localUsers);
+        if (newUser.email && newUser.password) {
+            sendEmailToScript({ to: newUser.email, subject: 'Acesso Cropflow', body: `Login: ${newUser.email} | Senha: ${newUser.password}`, action: 'welcome_email' }).catch(()=>{});
         }
-        
-        // FIX: Retorna o usuário criado localmente sem lançar erro, permitindo que a interface continue.
+        return data || newUser;
+    } catch (e) {
+        if (!localUsers.find(u => u.id === newUser.id)) { localUsers.push(newUser); saveToStorage(STORAGE_KEYS.USERS, localUsers); }
         return newUser;
     }
   },
 
   updateUser: async (user: any) => { 
     try {
-        const { error } = await supabase.from('app_users').update(user).eq('id', user.id);
-        if (error) throw error;
-
-        // Atualiza local
+        await supabase.from('app_users').update(user).eq('id', user.id);
         const idx = localUsers.findIndex(u => u.id === user.id);
-        if (idx !== -1) {
-            localUsers[idx] = { ...localUsers[idx], ...user };
-            saveToStorage(STORAGE_KEYS.USERS, localUsers);
-        }
+        if (idx !== -1) { localUsers[idx] = { ...localUsers[idx], ...user }; saveToStorage(STORAGE_KEYS.USERS, localUsers); }
         return user;
-    } catch (e: any) {
-        const errorMsg = e.message || JSON.stringify(e);
-        console.error("Erro ao atualizar usuário no banco (Salvando Localmente):", errorMsg);
-        
-        // Fallback local
+    } catch (e) {
         const idx = localUsers.findIndex(u => u.id === user.id);
-        if (idx !== -1) {
-            localUsers[idx] = { ...localUsers[idx], ...user };
-            saveToStorage(STORAGE_KEYS.USERS, localUsers);
-        }
+        if (idx !== -1) { localUsers[idx] = { ...localUsers[idx], ...user }; saveToStorage(STORAGE_KEYS.USERS, localUsers); }
         return user;
     }
   },
 
   deleteUser: async (id: string) => { 
-      // Deleta local primeiro para feedback imediato
       localUsers = localUsers.filter(u => u.id !== id);
       saveToStorage(STORAGE_KEYS.USERS, localUsers);
-
-      try {
-          const { error } = await supabase.from('app_users').delete().eq('id', id);
-          if (error) throw error;
-      } catch (e: any) {
-          const errorMsg = e.message || JSON.stringify(e);
-          console.error("Erro ao excluir usuário do banco (Removido Localmente):", errorMsg);
-          // Não lança erro, pois já foi removido localmente
-      }
+      try { await supabase.from('app_users').delete().eq('id', id); } catch (e) {}
   },
 
   getPedidos: async (user: User): Promise<Pedido[]> => {
-    try {
-      const { data, error } = await supabase.from('pedidos').select('*');
-      if (error) throw error;
-      
-      const normalizedData = (data || []).map((p: any) => ({
-        ...p,
-        id: String(p.id).trim(),
-        volume_total: Number(p.volume_total),
-        volume_restante: Number(p.volume_restante),
-        volume_faturado: Number(p.volume_faturado || 0),
-        valor_total: Number(p.valor_total),
-        valor_faturado: Number(p.valor_faturado || 0),
-        // Garante que o código seja string para comparação correta
-        codigo_vendedor: normalizeCode(String(p.codigo_vendedor))
-      })) as Pedido[];
-
-      const validDbData = normalizedData.filter(p => !deletedIds.includes(String(p.id)));
-      const dbMap = new Map(validDbData.map(p => [String(p.id).trim(), p]));
-      
-      localPedidos = localPedidos.map(local => {
-         const dbPedido = dbMap.get(String(local.id).trim());
-         return dbPedido ? { ...local, ...dbPedido } : local;
-      });
-
-      for (const dbPedido of validDbData) {
-         if (!localPedidos.find(l => String(l.id).trim() === String(dbPedido.id).trim())) {
-             localPedidos.push(dbPedido);
-         }
-      }
-
-      saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
-      return filterDataByRole(localPedidos, user);
-    } catch (e) {
-      console.warn("Usando dados locais de pedidos (Offline).");
-      return filterDataByRole(localPedidos, user);
+    // Carrega localmente e retorna. O DB é usado apenas para sync.
+    // Garantir que localPedidos tenham a estrutura correta (migração on-the-fly se necessário)
+    const safePedidos = localPedidos.map(p => {
+        if (!p.itens) {
+            // Migração: Se não tiver itens, cria baseado no cabeçalho
+            return {
+                ...p,
+                itens: [{
+                    id: `${p.id}-1`,
+                    nome_produto: p.nome_produto || 'Produto Geral',
+                    unidade: p.unidade,
+                    volume_total: p.volume_total,
+                    volume_restante: p.volume_restante,
+                    volume_faturado: p.volume_faturado,
+                    valor_total: p.valor_total,
+                    valor_unitario: p.volume_total > 0 ? p.valor_total / p.volume_total : 0
+                }]
+            };
+        }
+        return p;
+    });
+    
+    // Atualiza cache se houve migração
+    if (JSON.stringify(safePedidos) !== JSON.stringify(localPedidos)) {
+        localPedidos = safePedidos;
+        saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
     }
+
+    return filterDataByRole(localPedidos, user);
   },
 
   deletePedido: async (id: string) => {
-      // 1. Marca como deletado localmente para feedback instantâneo
       deletedIds.push(id);
       saveToStorage(STORAGE_KEYS.DELETED_IDS, deletedIds);
-      
       localPedidos = localPedidos.filter(p => p.id !== id);
       saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
-
-      // 2. Tenta deletar no servidor
       try {
-          // Deleta Solicitações vinculadas
           await supabase.from('solicitacoes').delete().eq('pedido_id', id);
-          // Deleta Histórico vinculado
           await supabase.from('historico_eventos').delete().eq('pedido_id', id);
-          // Deleta o Pedido
-          const { error } = await supabase.from('pedidos').delete().eq('id', id);
-          if (error) throw error;
-      } catch (e) {
-          console.error("Erro ao deletar pedido no servidor:", e);
-          throw new Error("Erro ao excluir pedido (mas removido localmente).");
-      }
+          await supabase.from('pedidos').delete().eq('id', id);
+      } catch (e) {}
   },
 
   clearAllPedidos: async () => {
-      // Limpa LocalStorage
       localStorage.removeItem(STORAGE_KEYS.PEDIDOS);
       localStorage.removeItem(STORAGE_KEYS.SOLICITACOES);
       localStorage.removeItem(STORAGE_KEYS.HISTORICO);
       localStorage.removeItem(STORAGE_KEYS.LOGS);
-      
-      localPedidos = [];
-      localSolicitacoes = [];
-      localHistorico = [];
-      localLogs = [];
-      deletedIds = [];
-      
+      localPedidos = []; localSolicitacoes = []; localHistorico = []; localLogs = []; deletedIds = [];
       saveToStorage(STORAGE_KEYS.PEDIDOS, []);
       saveToStorage(STORAGE_KEYS.SOLICITACOES, []);
-      saveToStorage(STORAGE_KEYS.HISTORICO, []);
-      saveToStorage(STORAGE_KEYS.LOGS, []);
       saveToStorage(STORAGE_KEYS.DELETED_IDS, []);
-
-      // Limpa Supabase com UUID válido para evitar erro de sintaxe
-      const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
+      const ZERO = '00000000-0000-0000-0000-000000000000';
       try {
-          // Como temos ON DELETE CASCADE nas chaves estrangeiras, 
-          // deletar PEDIDOS deve limpar tudo. Mas por segurança limpamos os filhos antes.
-          try { await supabase.from('solicitacoes').delete().neq('id', ZERO_UUID); } catch(e) {}
-          try { await supabase.from('historico_eventos').delete().neq('id', ZERO_UUID); } catch(e) {}
-          try { await supabase.from('app_logs').delete().neq('id', '0'); } catch(e) {} // logs usa text id
-          try { await supabase.from('pedidos').delete().neq('id', '0'); } catch(e) {} // pedidos usa text id
-      } catch (e) {
-          console.error("Erro ao limpar banco de dados (ignorando se já vazio):", e);
-      }
+          await supabase.from('solicitacoes').delete().neq('id', ZERO);
+          await supabase.from('historico_eventos').delete().neq('id', ZERO);
+          await supabase.from('app_logs').delete().neq('id', '0');
+          await supabase.from('pedidos').delete().neq('id', '0');
+      } catch (e) {}
   },
 
   getSolicitacoes: async (user: User): Promise<SolicitacaoFaturamento[]> => {
-    try {
-      const { data, error } = await supabase.from('solicitacoes').select('*');
-      if (!error && data) {
-         // Hidratação: Como o DB pode não ter as colunas desnormalizadas (nome_produto, cliente, etc)
-         // se o schema estiver estrito, nós mesclamos com os dados de Pedidos carregados localmente.
-         const hydratedData = data.map((s: any) => {
-             const pedido = localPedidos.find(p => p.id === s.pedido_id);
-             return {
-                 ...s,
-                 nome_produto: s.nome_produto || pedido?.nome_produto || 'Produto Geral',
-                 nome_cliente: s.nome_cliente || pedido?.nome_cliente || 'Cliente',
-                 numero_pedido: s.numero_pedido || pedido?.numero_pedido || '---',
-                 unidade: s.unidade || pedido?.unidade || 'TN'
-             };
-         });
-
-         localSolicitacoes = hydratedData as SolicitacaoFaturamento[];
-         saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
-      }
-    } catch (e) { console.warn("Offline solicitacoes"); }
-    
-    if (user.role === Role.VENDEDOR) {
-      return localSolicitacoes.filter(s => s.criado_por === user.name);
-    }
-    return localSolicitacoes;
+    // Retorna local. Sync com DB é feito em background se necessário.
+    const solicitacoes = user.role === Role.VENDEDOR 
+        ? localSolicitacoes.filter(s => s.criado_por === user.name) 
+        : localSolicitacoes;
+    return solicitacoes;
   },
 
   getSolicitacoesByPedido: async (pedidoId: string): Promise<SolicitacaoFaturamento[]> => {
-    try {
-      const { data } = await supabase.from('solicitacoes').select('*').eq('pedido_id', pedidoId);
-      if (data) {
-          // Mesma hidratação aqui
-          const pedido = localPedidos.find(p => p.id === pedidoId);
-          return data.map((s: any) => ({
-              ...s,
-              nome_produto: s.nome_produto || pedido?.nome_produto || 'Produto Geral',
-              nome_cliente: s.nome_cliente || pedido?.nome_cliente || 'Cliente',
-              numero_pedido: s.numero_pedido || pedido?.numero_pedido || '---',
-              unidade: s.unidade || pedido?.unidade || 'TN'
-          })) as SolicitacaoFaturamento[];
-      }
-    } catch(e) {}
     return localSolicitacoes.filter(s => s.pedido_id === pedidoId);
   },
   
   getHistoricoPedido: async (pedidoId: string): Promise<HistoricoEvento[]> => {
-    let dbEvents: HistoricoEvento[] = [];
-    
-    // 1. Tenta buscar do DB
-    try {
-        const { data } = await supabase.from('historico_eventos').select('*').eq('pedido_id', pedidoId);
-        if(data) dbEvents = data as HistoricoEvento[];
-    } catch (e) {
-        console.warn("Erro ao buscar histórico do DB, usando local.", e);
-    }
-
-    // 2. Busca do LocalStorage
-    const localEvents = localHistorico.filter(h => h.pedido_id === pedidoId);
-
-    // 3. Mesclar listas (Removendo duplicatas baseadas no ID se possível, ou Timestamp)
-    // Priorizamos o que veio do banco, e adicionamos o local apenas se não existir
-    const mergedEvents = [...dbEvents];
-    
-    localEvents.forEach(localEvt => {
-        // Verifica se já existe um evento similar no DB (mesma ação)
-        // Isso evita duplicação visual quando o sync do DB é lento ou quando o formato da data difere (ISO string vs timestamp)
-        // Usamos uma tolerância de 2 segundos para considerar o mesmo evento
-        const exists = mergedEvents.some(dbEvt => 
-            dbEvt.id === localEvt.id || 
-            (
-                dbEvt.acao === localEvt.acao && 
-                Math.abs(new Date(dbEvt.data_evento).getTime() - new Date(localEvt.data_evento).getTime()) < 2000
-            )
-        );
-        
-        if (!exists) {
-            mergedEvents.push(localEvt);
-        }
-    });
-
-    // 4. Ordenação Final
-    return mergedEvents.sort((a,b) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
+    return localHistorico.filter(h => h.pedido_id === pedidoId).sort((a,b) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
   },
 
-  createSolicitacao: async (pedidoId: string, volume: number, user: User, obsVendedor: string) => {
+  // --- NOVA ASSINATURA PARA SUPORTAR MÚLTIPLOS ITENS ---
+  createSolicitacao: async (pedidoId: string, itensSolicitados: { nome_produto: string, volume: number, unidade: string }[], user: User, obsVendedor: string) => {
     const pedido = localPedidos.find(p => p.id === pedidoId);
     if (!pedido) throw new Error('Pedido não encontrado');
 
-    if (volume > pedido.volume_restante) {
-      throw new Error('Volume solicitado excede o restante disponível');
+    // Validação de volume por item e Cálculo do Valor
+    let volumeTotalSolicitado = 0;
+    let valorTotalSolicitado = 0;
+    
+    // Atualiza volume restante nos itens do pedido
+    for (const itemReq of itensSolicitados) {
+        const itemOriginal = pedido.itens.find(i => i.nome_produto === itemReq.nome_produto);
+        if (!itemOriginal) continue; // Skip if invalid
+
+        if (itemReq.volume > (itemOriginal.volume_restante + 0.001)) {
+            throw new Error(`Volume solicitado para ${itemReq.nome_produto} excede o disponível.`);
+        }
+        
+        // Deduz imediatamente ao criar a solicitação
+        itemOriginal.volume_restante -= itemReq.volume;
+        
+        volumeTotalSolicitado += itemReq.volume;
+        valorTotalSolicitado += itemReq.volume * itemOriginal.valor_unitario;
     }
+    
+    // Atualiza totais globais do pedido
+    pedido.volume_restante = pedido.itens.reduce((acc, i) => acc + i.volume_restante, 0);
+
+    // Cria string de resumo para compatibilidade com paineis legados
+    const resumoProdutos = itensSolicitados.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
 
     const novaSolicitacao: SolicitacaoFaturamento = {
-      id: `req-${Date.now()}`, // ID temporário, DB gera UUID real
+      id: `req-${Date.now()}`,
       pedido_id: pedidoId,
       numero_pedido: pedido.numero_pedido,
       nome_cliente: pedido.nome_cliente,
-      nome_produto: pedido.nome_produto,
-      unidade: pedido.unidade,
-      volume_solicitado: volume,
+      
+      // Campos de compatibilidade
+      nome_produto: resumoProdutos,
+      unidade: itensSolicitados[0]?.unidade || 'TN', 
+      volume_solicitado: volumeTotalSolicitado,
+      valor_solicitado: valorTotalSolicitado, // Novo campo
+      
+      // Novo campo detalhado
+      itens_solicitados: itensSolicitados,
+
       status: StatusSolicitacao.PENDENTE,
       criado_por: user.name,
       data_solicitacao: new Date().toISOString(),
       obs_vendedor: obsVendedor || undefined
     };
 
-    // Salva Local
     localSolicitacoes.push(novaSolicitacao);
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
+    saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos); // Salva pedido atualizado
 
-    // Salva DB
     try {
-      // Remove o ID temporário para o insert no banco, pois o DB deve gerar
       const payload = { ...novaSolicitacao };
-      delete (payload as any).id;
+      delete (payload as any).id; // DB gera ID
+      delete (payload as any).itens_solicitados; // Remove complex object if DB schema is strict text
       
-      // FIX: Remove campos desnivelados que podem não existir no schema do DB
-      // Isso evita o erro "Could not find the 'nome_produto' column"
-      delete (payload as any).nome_produto;
-      delete (payload as any).nome_cliente;
-      delete (payload as any).numero_pedido;
-      delete (payload as any).unidade;
-
-      const { error } = await supabase.from('solicitacoes').insert(payload);
-      
-      if (error) {
-          // SE FALHAR COM VIOLAÇÃO DE CHAVE ESTRANGEIRA (Código 23503), 
-          // significa que o pedido não existe na tabela 'pedidos' do DB.
-          // TENTATIVA DE AUTO-CORREÇÃO: Inserir o pedido e tentar de novo.
-          if (error.code === '23503') {
-             console.warn(`Pedido ${pedidoId} não encontrado no banco de dados. Tentando sincronizar...`);
-             const { error: orderError } = await supabase.from('pedidos').upsert(pedido);
-             
-             if (!orderError) {
-                 // Pedido sincronizado, tenta salvar a solicitação novamente
-                 const { error: retryError } = await supabase.from('solicitacoes').insert(payload);
-                 if (retryError) throw retryError;
-             } else {
-                 throw orderError; // Falha na sincronização do pedido
-             }
-          } else {
-             throw error; // Outro tipo de erro
-          }
-      }
-    } catch (e: any) {
-      // Log detalhado para evitar "[object Object]"
-      console.error("Erro ao criar solicitação no DB (salvo localmente):", e.message || JSON.stringify(e));
+      // Tenta salvar campos básicos no Supabase (se schema permitir JSON, poderíamos mandar itens_solicitados)
+      await supabase.from('solicitacoes').insert(payload);
+    } catch (e) {
+      console.warn("Offline createSolicitacao");
     }
 
-    // FIX: Gravar evento na linha do tempo COM A OBSERVAÇÃO DO VENDEDOR
-    const detalhesLog = `Volume: ${volume} ${pedido.unidade}${obsVendedor ? ` | Obs: ${obsVendedor}` : ''}`;
+    const detalhesLog = `Itens: ${resumoProdutos}${obsVendedor ? ` | Obs: ${obsVendedor}` : ''}`;
     await logEvento(pedidoId, user, 'Solicitação Criada', detalhesLog, 'SUCESSO');
   },
 
@@ -832,83 +754,69 @@ export const api = {
     user: User, 
     motivoRejeicao?: string,
     blockedByRole?: Role,
-    extraData?: { prazo?: string, obs_faturamento?: string }
+    extraData?: { prazo?: string, obs_faturamento?: string },
+    itensAtendidos?: { nome_produto: string, volume: number, unidade: string }[]
   ) => {
     const solIndex = localSolicitacoes.findIndex(s => s.id === id);
     if (solIndex === -1) return;
 
     const updatedSol = { ...localSolicitacoes[solIndex], status };
     
-    // Tratamento específico para Rejeição/Bloqueio
     if (status === StatusSolicitacao.REJEITADO && motivoRejeicao) {
        const prefixo = blockedByRole ? `[BLOQUEIO: ${blockedByRole}] ` : '[BLOQUEIO] ';
        updatedSol.motivo_rejeicao = `${prefixo}${motivoRejeicao}`;
        updatedSol.blocked_by = blockedByRole;
-
-       // Disparar E-mail de Notificação (SOMENTE AQUI - BLOQUEIO)
-       // Primeiro tenta buscar o usuário pelo nome (criado_por)
-       let solicitante = localUsers.find(u => u.name === updatedSol.criado_por);
        
-       // Se não tiver email no usuário local ou não achar, tenta buscar do DB para garantir
-       if (!solicitante || !solicitante.email) {
-           try {
-               const { data } = await supabase.from('app_users').select('*').eq('name', updatedSol.criado_por).single();
-               if (data) solicitante = data as User;
-           } catch(e) { console.warn("Não foi possível buscar email do solicitante no DB."); }
-       }
+       // --- DISPARO DE EMAIL PARA O VENDEDOR E GERENTE ---
+       const creatorUser = localUsers.find(u => u.name === updatedSol.criado_por);
+       let managerUser: User | undefined;
 
-       if (solicitante && solicitante.email) {
-            const roleLabel = getRoleLabel(blockedByRole || user.role);
-            const emailsToSend = [solicitante.email];
-            
-            // Copia para o gerente se houver
-            if (solicitante.manager_id) {
-                const manager = localUsers.find(m => m.id === solicitante.manager_id);
-                if (manager && manager.email) {
-                    emailsToSend.push(manager.email);
-                }
-            }
+       if (creatorUser) {
+           // Busca o Gerente se houver vínculo
+           if (creatorUser.manager_id) {
+               managerUser = localUsers.find(u => u.id === creatorUser.manager_id);
+           }
 
-            // HTML Template para o E-mail de Bloqueio
-            const htmlContent = `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #334155;">
-                <div style="background-color: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
-                   <h1 style="color: white; margin: 0; font-size: 24px;">🛑 Solicitação Bloqueada</h1>
-                </div>
-                <div style="border: 1px solid #e2e8f0; border-top: none; padding: 32px; border-radius: 0 0 12px 12px; background-color: #ffffff;">
-                   <p style="font-size: 16px; margin-bottom: 24px;">Olá,</p>
-                   <p style="margin-bottom: 24px; line-height: 1.5;">Informamos que a solicitação abaixo foi <strong>bloqueada</strong> pelo setor responsável.</p>
-                   
-                   <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
-                      <p style="margin: 5px 0;"><strong>Pedido:</strong> ${updatedSol.numero_pedido}</p>
-                      <p style="margin: 5px 0;"><strong>Cliente:</strong> ${updatedSol.nome_cliente}</p>
-                      <p style="margin: 5px 0;"><strong>Produto:</strong> ${updatedSol.nome_produto || 'N/A'}</p>
-                      <p style="margin: 5px 0;"><strong>Volume:</strong> ${updatedSol.volume_solicitado} ${updatedSol.unidade}</p>
-                   </div>
+           const recipients = [creatorUser.email];
+           if (managerUser && managerUser.email) {
+               recipients.push(managerUser.email);
+           }
 
-                   <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; padding: 20px; border-radius: 4px;">
-                      <p style="margin: 0 0 8px 0; color: #991b1b; font-size: 12px; text-transform: uppercase; font-weight: bold;">Bloqueado por: ${roleLabel}</p>
-                      <p style="margin: 0; color: #7f1d1d; font-size: 16px;">${motivoRejeicao}</p>
-                   </div>
-                   
-                   <p style="margin-top: 32px; font-size: 14px; color: #94a3b8; text-align: center;">Acesse o sistema Cropflow para mais detalhes.</p>
-                </div>
-              </div>
-            `;
+           if (recipients.length > 0 && recipients[0]) {
+               const htmlContent = generateBlockEmailTemplate({
+                   vendorName: creatorUser.name,
+                   managerName: managerUser ? managerUser.name : undefined,
+                   orderNumber: updatedSol.numero_pedido,
+                   clientName: updatedSol.nome_cliente,
+                   reason: motivoRejeicao,
+                   blockerName: user.name,
+                   blockerRole: getRoleLabel(user.role)
+               });
 
-            // Envia para cada destinatário com Layout HTML
-            emailsToSend.forEach(emailAddr => {
-                sendEmailToScript({
-                    to: emailAddr,
-                    subject: `🛑 BLOQUEIO: Pedido ${updatedSol.numero_pedido} - ${updatedSol.nome_cliente}`,
-                    body: htmlContent, // Envia o HTML no corpo
-                    action: 'block_notification'
-                }).catch(err => console.error("Falha ao enviar e-mail de bloqueio:", err));
-            });
+               const emailBody = `
+                 Olá ${creatorUser.name}${managerUser ? ` (C/C: ${managerUser.name})` : ''},
+                 
+                 A solicitação de faturamento para o pedido ${updatedSol.numero_pedido} foi BLOQUEADA.
+                 
+                 Cliente: ${updatedSol.nome_cliente}
+                 Motivo: ${motivoRejeicao}
+                 Responsável pelo Bloqueio: ${user.name} (${getRoleLabel(user.role)})
+                 
+                 Por favor, verifique no sistema para mais detalhes.
+               `;
+               
+               sendEmailToScript({
+                   to: recipients.join(','),
+                   subject: `🚫 Bloqueio: Pedido ${updatedSol.numero_pedido} - Cropflow`,
+                   body: emailBody,
+                   htmlBody: htmlContent, // Envia o HTML rico
+                   action: 'notification'
+               }).catch(err => console.error("Falha ao enviar email de bloqueio", err));
+           }
        }
     }
 
-    // Tratamento para Faturamento (Reset de flags)
+    // Lógica para envio para análise (Triagem do Faturamento) com revisão de itens
     if (status === StatusSolicitacao.EM_ANALISE) {
        updatedSol.aprovacao_comercial = false;
        updatedSol.aprovacao_credito = false;
@@ -916,41 +824,158 @@ export const api = {
        updatedSol.motivo_rejeicao = undefined;
        updatedSol.obs_comercial = undefined;
        updatedSol.obs_credito = undefined;
-       updatedSol.aprovado_por = undefined; // Limpa aprovação anterior
-       
+       updatedSol.aprovado_por = undefined;
        if (extraData) {
            updatedSol.prazo_pedido = extraData.prazo;
            updatedSol.obs_faturamento = extraData.obs_faturamento;
        }
+
+       // Se houver itens revisados (itensAtendidos sendo usado como payload de itens aprovados na triagem)
+       if (itensAtendidos && updatedSol.itens_solicitados) {
+           const pedido = localPedidos.find(p => p.id === updatedSol.pedido_id);
+           if (pedido) {
+               const itensRejeitados: ItemSolicitado[] = [];
+               let novoValorAprovado = 0;
+               let valorRejeitado = 0;
+               let detalheRejeicaoTexto = "";
+
+               // 1. Identifica quais itens foram rejeitados (não selecionados ou volume reduzido)
+               // e Devolve o saldo total original para a carteira temporariamente
+               updatedSol.itens_solicitados.forEach(orig => {
+                   const itemP = pedido.itens.find(pItem => pItem.nome_produto === orig.nome_produto);
+                   
+                   // Retorno para carteira (re-adicionar)
+                   if (itemP) {
+                       itemP.volume_restante += orig.volume;
+                   }
+
+                   // Verificação de rejeição
+                   const aprovado = itensAtendidos.find(a => a.nome_produto === orig.nome_produto);
+                   if (!aprovado) {
+                       // Item totalmente removido na triagem
+                       itensRejeitados.push({
+                           ...orig,
+                           obs: 'Cancelado na triagem do Faturamento'
+                       });
+                       if (itemP) {
+                           valorRejeitado += orig.volume * itemP.valor_unitario;
+                           detalheRejeicaoTexto += `${orig.nome_produto} (${orig.volume} ${orig.unidade}); `;
+                       }
+                   } else if (aprovado.volume < orig.volume) {
+                       // Volume reduzido na triagem
+                       const diff = orig.volume - aprovado.volume;
+                       itensRejeitados.push({
+                           ...orig,
+                           volume: diff,
+                           obs: `Volume reduzido na triagem (Solicitado: ${orig.volume})`
+                       });
+                       if (itemP) {
+                           valorRejeitado += diff * itemP.valor_unitario;
+                           detalheRejeicaoTexto += `${orig.nome_produto} (Corte: ${diff} ${orig.unidade}); `;
+                       }
+                   }
+               });
+
+               // 2. Abater APENAS o que foi confirmado na triagem do saldo que acabamos de restaurar
+               itensAtendidos.forEach(aprovado => {
+                   const itemP = pedido.itens.find(pItem => pItem.nome_produto === aprovado.nome_produto);
+                   if (itemP) {
+                       itemP.volume_restante = Math.max(0, itemP.volume_restante - aprovado.volume);
+                       novoValorAprovado += aprovado.volume * itemP.valor_unitario;
+                   }
+               });
+
+               // 3. SE HOUVER ITENS REJEITADOS: Criar um registro de "REJEIÇÃO" separado para aparecer no painel do vendedor
+               if (itensRejeitados.length > 0) {
+                   const rejeicao: SolicitacaoFaturamento = {
+                       ...updatedSol,
+                       id: `req-rej-${Date.now()}`, // ID novo
+                       itens_solicitados: itensRejeitados,
+                       volume_solicitado: itensRejeitados.reduce((acc, i) => acc + i.volume, 0),
+                       valor_solicitado: valorRejeitado, // Atualiza valor dos rejeitados
+                       nome_produto: "Devolução: " + itensRejeitados.map(i => i.nome_produto).join(', '),
+                       status: StatusSolicitacao.REJEITADO,
+                       blocked_by: Role.FATURAMENTO,
+                       motivo_rejeicao: `[CORTE DE ESTOQUE] Itens devolvidos: ${detalheRejeicaoTexto}`,
+                       data_solicitacao: new Date().toISOString()
+                   };
+                   localSolicitacoes.push(rejeicao);
+                   
+                   // Tenta salvar no Supabase também
+                   try {
+                       const rejPayload = { ...rejeicao };
+                       delete (rejPayload as any).id;
+                       delete (rejPayload as any).itens_solicitados; 
+                       await supabase.from('solicitacoes').insert(rejPayload);
+                   } catch (e) {}
+               }
+
+               // 4. Atualizar a solicitação original com a nova lista limpa (apenas aprovados)
+               updatedSol.itens_solicitados = itensAtendidos;
+               
+               // 5. Recalcular totais globais
+               pedido.volume_restante = pedido.itens.reduce((acc, i) => acc + i.volume_restante, 0);
+               updatedSol.volume_solicitado = itensAtendidos.reduce((acc, i) => acc + i.volume, 0);
+               updatedSol.valor_solicitado = novoValorAprovado; // Atualiza o valor financeiro do aprovado
+               
+               // Atualiza resumo
+               updatedSol.nome_produto = itensAtendidos.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
+           }
+       }
     }
     
-    // Tratamento para Finalização (Faturado)
+    // Tratamento para Faturamento Final (Atualiza estoque dos itens específicos e finaliza)
     if (status === StatusSolicitacao.FATURADO) {
        const pedido = localPedidos.find(p => p.id === updatedSol.pedido_id);
        if (pedido) {
-         pedido.volume_restante -= updatedSol.volume_solicitado;
-         if (pedido.volume_restante < 0) pedido.volume_restante = 0;
          
-         pedido.volume_faturado = (pedido.volume_faturado || 0) + updatedSol.volume_solicitado;
-         pedido.valor_faturado = (pedido.valor_faturado || 0) + (updatedSol.volume_solicitado * (pedido.valor_total / pedido.volume_total));
+         // Se o usuário do faturamento editou os itens NA HORA DA EMISSÃO (itensAtendidos), usamos essa lista.
+         const itensParaProcessar = itensAtendidos || updatedSol.itens_solicitados || [];
+         
+         if (itensAtendidos) {
+             updatedSol.itens_atendidos = itensAtendidos;
+             
+             // Se houve alteração no momento do faturamento (diferente da análise), precisamos ajustar o saldo novamente
+             if (updatedSol.itens_solicitados) {
+                 updatedSol.itens_solicitados.forEach(solicitado => {
+                     const faturado = itensAtendidos.find(f => f.nome_produto === solicitado.nome_produto);
+                     const volFaturado = faturado ? faturado.volume : 0;
+                     const diferenca = solicitado.volume - volFaturado;
+                     
+                     if (diferenca > 0) {
+                         const itemP = pedido.itens.find(p => p.nome_produto === solicitado.nome_produto);
+                         if (itemP) {
+                             // Como o volume da solicitação já estava deduzido, devolvemos a diferença
+                             itemP.volume_restante += diferenca;
+                         }
+                     }
+                 });
+             }
+         }
 
-         if (pedido.volume_restante < 1) { // Margem de erro float
+         // Registra o faturamento nos itens do pedido
+         let valorTotalFaturadoNesta = 0;
+         itensParaProcessar.forEach(proc => {
+             const itemP = pedido.itens.find(p => p.nome_produto === proc.nome_produto);
+             if (itemP) {
+                 itemP.volume_faturado = (itemP.volume_faturado || 0) + proc.volume;
+                 // Cálculo de valor exato baseado no item unitário
+                 valorTotalFaturadoNesta += (proc.volume * itemP.valor_unitario);
+             }
+         });
+
+         // Recalcula totais do pedido baseados nos itens
+         pedido.volume_restante = pedido.itens.reduce((acc, i) => acc + i.volume_restante, 0);
+         pedido.volume_faturado = pedido.itens.reduce((acc, i) => acc + (i.volume_faturado || 0), 0);
+         
+         // Atualiza o valor faturado acumulado com o cálculo preciso desta emissão
+         pedido.valor_faturado = (pedido.valor_faturado || 0) + valorTotalFaturadoNesta;
+
+         if (pedido.volume_restante < 1) { 
            pedido.status = StatusPedido.FINALIZADO;
          } else {
            pedido.status = StatusPedido.PARCIALMENTE_FATURADO;
          }
-         
-         // Atualiza pedido no DB
-         try {
-             // IMPORTANTE: Removemos volume_faturado e valor_faturado do payload se o schema não suportar
-             // O banco pode não ter essas colunas ainda.
-             await supabase.from('pedidos').update({
-                 volume_restante: pedido.volume_restante,
-                 status: pedido.status
-             }).eq('id', pedido.id);
-         } catch(e) {}
-         
-         // REMOVIDO DISPARO DE EMAIL AQUI - APENAS BLOQUEIOS SÃO NOTIFICADOS
        }
     }
 
@@ -958,271 +983,298 @@ export const api = {
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
     saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
-    // Sync DB
     try {
         const payload = { ...updatedSol };
-        // Clean fields that might not be in DB schema
-        delete (payload as any).nome_produto;
+        delete (payload as any).itens_solicitados; 
+        delete (payload as any).itens_atendidos; // não envia complexo se DB n suportar
+        delete (payload as any).nome_produto; 
         delete (payload as any).nome_cliente;
         delete (payload as any).numero_pedido;
         delete (payload as any).unidade;
-
         await supabase.from('solicitacoes').update(payload).eq('id', id);
     } catch(e) {}
 
-    // Log Evento (ENRIQUECIDO COM OBSERVAÇÕES)
     const acaoLabel = status === StatusSolicitacao.EM_ANALISE ? 'Enviado para Análise' :
                       status === StatusSolicitacao.FATURADO ? 'Nota Fiscal Emitida' :
                       status === StatusSolicitacao.REJEITADO ? `Bloqueado (${blockedByRole || 'Geral'})` :
                       status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'Aprovado para Faturamento' : status;
     
+    // Log com detalhes extras se houver corte de volume
     let detalhesLog = motivoRejeicao;
-    
-    // Se estiver enviando para análise, incluir Prazo e Obs do Faturamento no log
-    if (status === StatusSolicitacao.EM_ANALISE && extraData) {
-        const parts = [];
-        if (extraData.prazo) parts.push(`Prazo: ${extraData.prazo}`);
-        if (extraData.obs_faturamento) parts.push(`Obs: ${extraData.obs_faturamento}`);
-        if (parts.length > 0) detalhesLog = parts.join(' | ');
+    if (status === StatusSolicitacao.FATURADO && itensAtendidos) {
+       const resumoAtendido = itensAtendidos.map(i => `${i.nome_produto}: ${i.volume}`).join(', ');
+       detalhesLog = `Faturado Parcial/Total: ${resumoAtendido}`;
+    }
+    if (status === StatusSolicitacao.EM_ANALISE && itensAtendidos) {
+       const resumoTriagem = itensAtendidos.map(i => `${i.nome_produto}: ${i.volume}`).join(', ');
+       detalhesLog = `Triagem realizada. Itens para análise: ${resumoTriagem}`;
     }
 
     await logEvento(updatedSol.pedido_id, user, acaoLabel, detalhesLog, status === StatusSolicitacao.REJEITADO ? 'ALERTA' : 'SUCESSO');
   },
 
-  approveSolicitacaoStep: async (id: string, role: Role, user: User, obs?: string) => {
+  approveSolicitacaoStep: async (
+    id: string, 
+    role: Role, 
+    user: User, 
+    obs?: string,
+    itensAprovados?: { nome_produto: string, volume: number, unidade: string }[],
+    itensRejeitados?: { nome_produto: string, volume: number, unidade: string, obs: string }[]
+  ) => {
     const sol = localSolicitacoes.find(s => s.id === id);
     if (!sol) return;
 
     const updates: any = {};
-    if (role === Role.COMERCIAL) {
-        updates.aprovacao_comercial = true;
-        updates.obs_comercial = obs;
-    }
-    if (role === Role.CREDITO) {
-        updates.aprovacao_credito = true;
-        updates.obs_credito = obs;
+    if (role === Role.COMERCIAL) { updates.aprovacao_comercial = true; updates.obs_comercial = obs; }
+    if (role === Role.CREDITO) { updates.aprovacao_credito = true; updates.obs_credito = obs; }
+
+    const index = localSolicitacoes.findIndex(s => s.id === id);
+    let updatedSol = { ...localSolicitacoes[index], ...updates };
+
+    // LÓGICA DE SPLIT (APROVAÇÃO PARCIAL)
+    // Se houver itens rejeitados, cria nova solicitação rejeitada e remove da atual
+    if (itensRejeitados && itensRejeitados.length > 0 && itensAprovados) {
+        const pedido = localPedidos.find(p => p.id === sol.pedido_id);
+        
+        // 1. Criar solicitação REJEITADA com os itens negados
+        const rejectionItems: ItemSolicitado[] = itensRejeitados.map(i => ({
+             nome_produto: i.nome_produto,
+             volume: i.volume,
+             unidade: i.unidade,
+             obs: i.obs
+        }));
+        
+        let valorRejeitado = 0;
+        let nomesRejeitados = "";
+        
+        // Devolve volume para o pedido e calcula valor rejeitado
+        if (pedido) {
+            itensRejeitados.forEach(rej => {
+                const itemP = pedido.itens.find(p => p.nome_produto === rej.nome_produto);
+                if (itemP) {
+                    itemP.volume_restante += rej.volume;
+                    valorRejeitado += rej.volume * itemP.valor_unitario;
+                    nomesRejeitados += `${rej.nome_produto} (${rej.obs}); `;
+                }
+            });
+            // Recalcula totais do pedido
+            pedido.volume_restante = pedido.itens.reduce((acc, i) => acc + i.volume_restante, 0);
+        }
+
+        const novaRejeitada: SolicitacaoFaturamento = {
+            ...sol,
+            id: `req-rej-${Date.now()}`,
+            itens_solicitados: rejectionItems,
+            volume_solicitado: rejectionItems.reduce((acc, i) => acc + i.volume, 0),
+            valor_solicitado: valorRejeitado,
+            nome_produto: "Devolução: " + rejectionItems.map(i => i.nome_produto).join(', '),
+            status: StatusSolicitacao.REJEITADO,
+            blocked_by: role,
+            motivo_rejeicao: `[${role}] Itens reprovados durante análise: ${nomesRejeitados}`,
+            data_solicitacao: new Date().toISOString(),
+            // Limpa aprovações na nova (ela nasce morta/rejeitada)
+            aprovacao_comercial: false,
+            aprovacao_credito: false
+        };
+        localSolicitacoes.push(novaRejeitada);
+        
+        // --- ENVIO DE E-MAIL DA REJEIÇÃO PARCIAL ---
+        const creatorUser = localUsers.find(u => u.name === sol.criado_por);
+        let managerUser: User | undefined;
+        if (creatorUser) {
+            if (creatorUser.manager_id) managerUser = localUsers.find(u => u.id === creatorUser.manager_id);
+            const recipients = [creatorUser.email];
+            if (managerUser && managerUser.email) recipients.push(managerUser.email);
+
+            if (recipients.length > 0 && recipients[0]) {
+               const htmlContent = generateBlockEmailTemplate({
+                   vendorName: creatorUser.name,
+                   managerName: managerUser ? managerUser.name : undefined,
+                   orderNumber: sol.numero_pedido,
+                   clientName: sol.nome_cliente,
+                   reason: `[${role}] Devolução parcial na conferência`,
+                   blockerName: user.name,
+                   blockerRole: getRoleLabel(user.role),
+                   rejectedItems: nomesRejeitados
+               });
+
+               const emailBody = `
+                 Olá ${creatorUser.name}${managerUser ? ` (C/C: ${managerUser.name})` : ''},
+                 
+                 Houve uma REJEIÇÃO PARCIAL no pedido ${sol.numero_pedido} durante a conferência comercial.
+                 
+                 Itens Devolvidos: ${nomesRejeitados}
+                 Responsável: ${user.name}
+                 
+                 O restante do pedido segue aprovado.
+               `;
+               sendEmailToScript({
+                   to: recipients.join(','),
+                   subject: `⚠️ Devolução Parcial: Pedido ${sol.numero_pedido} - Cropflow`,
+                   body: emailBody,
+                   htmlBody: htmlContent, // HTML formatado
+                   action: 'notification'
+               }).catch(err => console.error("Falha ao enviar email de bloqueio parcial", err));
+            }
+        }
+        
+        try {
+           const rejPayload = { ...novaRejeitada };
+           delete (rejPayload as any).id;
+           delete (rejPayload as any).itens_solicitados; 
+           await supabase.from('solicitacoes').insert(rejPayload);
+        } catch(e) {}
+
+        // 2. Atualizar a solicitação ATUAL apenas com os aprovados
+        const aprovadosItems: ItemSolicitado[] = itensAprovados.map(i => ({
+            nome_produto: i.nome_produto,
+            volume: i.volume,
+            unidade: i.unidade
+        }));
+
+        let novoValorAprovado = 0;
+        if (pedido) {
+            aprovadosItems.forEach(ap => {
+                const itemP = pedido.itens.find(p => p.nome_produto === ap.nome_produto);
+                if (itemP) novoValorAprovado += ap.volume * itemP.valor_unitario;
+            });
+        }
+
+        updatedSol.itens_solicitados = aprovadosItems;
+        updatedSol.volume_solicitado = aprovadosItems.reduce((acc, i) => acc + i.volume, 0);
+        updatedSol.valor_solicitado = novoValorAprovado;
+        updatedSol.nome_produto = aprovadosItems.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
+        
+        // Atualiza pedido salvo
+        saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
     }
 
-    // Aplica atualizações locais
-    const index = localSolicitacoes.findIndex(s => s.id === id);
-    localSolicitacoes[index] = { ...localSolicitacoes[index], ...updates };
+    localSolicitacoes[index] = updatedSol;
     
-    // Verifica se ambos aprovaram para mudar status principal
-    const updatedSol = localSolicitacoes[index];
+    // Verifica aprovação total
     if (updatedSol.aprovacao_comercial && updatedSol.aprovacao_credito) {
         updatedSol.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
         updates.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
-        
-        // Log de sucesso final (incluindo observação final se houver)
-        const obsFinal = obs ? ` | Obs Final: ${obs}` : '';
-        await logEvento(sol.pedido_id, user, 'Aprovado para Faturamento', `Aprovação conjunta Comercial/Crédito concluída${obsFinal}`, 'SUCESSO');
+        await logEvento(sol.pedido_id, user, 'Aprovado para Faturamento', `Aprovação conjunta OK${obs ? ` | ${obs}` : ''}`, 'SUCESSO');
     } else {
         await logEvento(sol.pedido_id, user, `Aprovação Parcial (${role})`, obs, 'INFO');
     }
     
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
-
-    try {
-        // Here updates only contains flags and observations, which exist in DB
-        await supabase.from('solicitacoes').update(updates).eq('id', id);
+    try { 
+        const payload = { ...updatedSol };
+        // Limpa campos complexos antes de enviar update
+        delete (payload as any).itens_solicitados;
+        delete (payload as any).nome_produto; 
+        delete (payload as any).nome_cliente;
+        delete (payload as any).numero_pedido;
+        delete (payload as any).unidade;
+        await supabase.from('solicitacoes').update(payload).eq('id', id); 
     } catch(e) {}
   },
 
   unblockSolicitacao: async (id: string, user: User) => {
       const sol = localSolicitacoes.find(s => s.id === id);
       if (!sol) return;
-  
       let newStatus = StatusSolicitacao.PENDENTE;
       let newAprovComercial = false;
       let newAprovCredito = false;
-      let logMessage = 'Solicitação retornada para Triagem (Início)';
 
-      // LOGICA DE RETORNO BASEADA NO SETOR QUE BLOQUEOU
-      if (sol.blocked_by === Role.FATURAMENTO) {
-          // Bloqueio do Faturamento volta para o início (Triagem)
-          newStatus = StatusSolicitacao.PENDENTE;
-          newAprovComercial = false;
-          newAprovCredito = false;
-          logMessage = 'Desbloqueio Faturamento: Retornado para Triagem';
-      } 
-      else if (sol.blocked_by === Role.COMERCIAL) {
-          // Bloqueio do Comercial volta para Em Análise, mantendo aprovação do Crédito se existir
-          newStatus = StatusSolicitacao.EM_ANALISE;
-          newAprovComercial = false; // Reseta Comercial (precisa aprovar de novo)
-          newAprovCredito = sol.aprovacao_credito || false; // Mantém Crédito
-          logMessage = 'Desbloqueio Comercial: Retornado para Análise Comercial';
-      }
-      else if (sol.blocked_by === Role.CREDITO) {
-          // Bloqueio do Crédito volta para Em Análise, mantendo aprovação do Comercial se existir
-          newStatus = StatusSolicitacao.EM_ANALISE;
-          newAprovComercial = sol.aprovacao_comercial || false; // Mantém Comercial
-          newAprovCredito = false; // Reseta Crédito (precisa aprovar de novo)
-          logMessage = 'Desbloqueio Crédito: Retornado para Análise de Crédito';
-      }
-      else {
-          // Fallback (Admin ou sem bloqueio definido) - Reinicia tudo para garantir segurança
-          newStatus = StatusSolicitacao.PENDENTE;
-          newAprovComercial = false;
-          newAprovCredito = false;
-      }
+      if (sol.blocked_by === Role.FATURAMENTO) { newStatus = StatusSolicitacao.PENDENTE; } 
+      else if (sol.blocked_by === Role.COMERCIAL) { newStatus = StatusSolicitacao.EM_ANALISE; newAprovCredito = sol.aprovacao_credito || false; }
+      else if (sol.blocked_by === Role.CREDITO) { newStatus = StatusSolicitacao.EM_ANALISE; newAprovComercial = sol.aprovacao_comercial || false; }
+      else { newStatus = StatusSolicitacao.PENDENTE; }
       
       const updates = {
           status: newStatus,
-          blocked_by: null, // Remove bloqueio
-          motivo_rejeicao: null, // Limpa motivo
-          aprovacao_comercial: newAprovComercial,
-          aprovacao_credito: newAprovCredito,
-          // Força reset da observação do setor que bloqueou para exigir nova análise limpa, 
-          // mas mantém a do outro setor.
+          blocked_by: null, motivo_rejeicao: null,
+          aprovacao_comercial: newAprovComercial, aprovacao_credito: newAprovCredito,
           obs_comercial: sol.blocked_by === Role.COMERCIAL ? null : sol.obs_comercial,
           obs_credito: sol.blocked_by === Role.CREDITO ? null : sol.obs_credito
       };
       
       const index = localSolicitacoes.findIndex(s => s.id === id);
-      localSolicitacoes[index] = { ...localSolicitacoes[index], ...updates }; // @ts-ignore handles nulls
-      
+      localSolicitacoes[index] = { ...localSolicitacoes[index], ...updates }; // @ts-ignore
       saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
-      
-      try {
-          await supabase.from('solicitacoes').update(updates).eq('id', id);
-      } catch(e) {}
-      
-      await logEvento(sol.pedido_id, user, 'Desbloqueio Manual', logMessage, 'INFO');
+      try { await supabase.from('solicitacoes').update(updates).eq('id', id); } catch(e) {}
+      await logEvento(sol.pedido_id, user, 'Desbloqueio Manual', 'Solicitação retornada', 'INFO');
   },
 
-  getLogs: async (): Promise<LogSincronizacao[]> => {
-    try {
-        const { data } = await supabase.from('app_logs').select('*').order('data', { ascending: false });
-        if(data) return data as LogSincronizacao[];
-    } catch (e) {}
-    return localLogs.sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  },
-  
-  getLastSyncTime: async (): Promise<string | null> => {
-    try {
-      // Tenta pegar do banco primeiro
-      const { data } = await supabase
-        .from('app_logs')
-        .select('data')
-        .eq('sucesso', true)
-        .order('data', { ascending: false })
-        .limit(1)
-        .single();
-        
-      if (data) return data.data;
-    } catch (e) {}
-    
-    // Fallback local
-    const lastSuccess = localLogs.filter(l => l.sucesso).sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
-    return lastSuccess ? lastSuccess.data : null;
+  getLogs: async (): Promise<LogSincronizacao[]> => { return localLogs.sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime()); },
+  getLastSyncTime: async (): Promise<string | null> => { 
+      const lastSuccess = localLogs.filter(l => l.sucesso).sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
+      return lastSuccess ? lastSuccess.data : null;
   },
 
   triggerManualSync: async (tipo: 'MANUAL' | 'AUTOMATICO' = 'MANUAL') => {
     const csvUrl = currentConfig.csvUrl;
     if (!csvUrl) throw new Error("URL do CSV não configurada.");
-    
-    // 1. Converter link do drive se necessário
     const directUrl = convertDriveLink(csvUrl);
-    
-    // Lista de Proxies para tentar em ordem
     const proxies = [
-        // CodeTabs: Muito confiável para arquivos grandes, não corta dados
         (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        // AllOrigins: Retorna JSON com o conteúdo na propriedade 'contents'
         (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-        // CorsProxy.io: Retorna o arquivo direto (Texto puro)
         (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
     ];
 
     let csvText = '';
     let lastError = null;
 
-    // Tenta cada proxy até conseguir ou acabar as opções
     for (const proxyGen of proxies) {
         try {
             const proxyUrl = proxyGen(directUrl);
             const response = await fetch(proxyUrl);
-            
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            
-            // Tratamento específico por Proxy
-            if (proxyUrl.includes('allorigins')) {
-                const data = await response.json();
-                csvText = data.contents;
-            } else {
-                csvText = await response.text();
-            }
-            
-            if (csvText && csvText.length > 50) break; // Sucesso, sai do loop (Length check to ensure not empty error msg)
-        } catch (e) {
-            console.warn(`Proxy falhou:`, e);
-            lastError = e;
-        }
+            if (proxyUrl.includes('allorigins')) { const data = await response.json(); csvText = data.contents; } 
+            else { csvText = await response.text(); }
+            if (csvText && csvText.length > 50) break;
+        } catch (e) { lastError = e; }
     }
 
-    // Se após todas as tentativas não tivermos o texto
     if (!csvText) {
         const errorMessage = lastError instanceof Error ? lastError.message : "Erro desconhecido";
-        
-        // Log de Erro no Sistema
-        const logEntry: LogSincronizacao = {
-            id: `log-${Date.now()}`,
-            data: new Date().toISOString(),
-            tipo: tipo,
-            arquivo: 'Google Drive Sync',
-            sucesso: false,
-            mensagens: [`Falha ao baixar arquivo: ${errorMessage}. Verifique se o link é público.`]
-        };
-        
-        localLogs.unshift(logEntry);
-        saveToStorage(STORAGE_KEYS.LOGS, localLogs);
-        try { await supabase.from('app_logs').insert(logEntry); } catch(e) {}
-
-        throw new Error(`Falha de conexão com o arquivo do Drive. Erro: ${errorMessage}`);
+        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: false, mensagens: [`Falha: ${errorMessage}`] };
+        localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
+        throw new Error(`Sync falhou: ${errorMessage}`);
     }
 
     try {
-        // 3. Processar CSV (Já temos o texto)
         const novosPedidos = parseCSV(csvText);
-        
-        if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado no arquivo (Verifique o formato).");
+        if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado.");
 
-        // 4. Atualizar Base (Merge inteligente)
-        let added = 0;
-        let updated = 0;
-
-        // Recupera IDs deletados para não recriar
+        let added = 0; let updated = 0;
         const currentDeletedIds = loadFromStorage(STORAGE_KEYS.DELETED_IDS, []);
 
         novosPedidos.forEach(novo => {
-            // Se o pedido foi deletado explicitamente, ignora na sincronização
             if (currentDeletedIds.includes(String(novo.id))) return;
-
             const existsIdx = localPedidos.findIndex(p => String(p.id) === String(novo.id));
-            
             if (existsIdx !== -1) {
-                // Atualiza existente.
-                // Se o pedido no app tem status diferente de PENDENTE (ou seja, já foi mexido), mantemos o status do app.
-                // Atualizamos valores e volumes.
-                
                 const existing = localPedidos[existsIdx];
-                const statusToKeep = existing.status !== StatusPedido.PENDENTE ? existing.status : novo.status;
-                
+                // Mesclar itens mantendo volumes já consumidos
+                const itensMesclados = novo.itens.map(novoItem => {
+                    const itemExistente = existing.itens.find(ie => ie.nome_produto === novoItem.nome_produto);
+                    if (itemExistente) {
+                        const diferencaVolume = novoItem.volume_total - itemExistente.volume_total;
+                        return {
+                            ...novoItem,
+                            volume_restante: itemExistente.volume_restante + diferencaVolume,
+                            volume_faturado: itemExistente.volume_faturado
+                        };
+                    }
+                    return novoItem;
+                });
+
                 localPedidos[existsIdx] = { 
                     ...novo, 
-                    status: statusToKeep,
-                    // Preserva dados calculados de faturamento que o app gerencia
+                    itens: itensMesclados,
+                    status: existing.status !== StatusPedido.PENDENTE ? existing.status : novo.status,
                     volume_faturado: existing.volume_faturado,
                     valor_faturado: existing.valor_faturado,
                     volume_restante: existing.volume_restante 
                 };
                 
-                // Recalcula volume restante se o total mudou no CSV
-                if (localPedidos[existsIdx].volume_total !== existing.volume_total) {
-                    const diff = localPedidos[existsIdx].volume_total - existing.volume_total;
-                    localPedidos[existsIdx].volume_restante = (existing.volume_restante || 0) + diff;
-                }
-
+                // Recalcula totais globais do pedido baseados nos itens mesclados
+                localPedidos[existsIdx].volume_restante = itensMesclados.reduce((acc, i) => acc + i.volume_restante, 0);
+                
                 updated++;
             } else {
                 localPedidos.push(novo);
@@ -1231,91 +1283,15 @@ export const api = {
         });
 
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
-
-        // 5. Persistir no Banco (Upsert em lotes pequenos com retry)
-        try {
-            const payload = localPedidos.map(p => {
-                const safePedido = { ...p };
-                // REMOVE CAMPOS QUE NÃO EXISTEM NO BANCO (CORREÇÃO SCHEMA CACHE)
-                delete (safePedido as any).valor_faturado;
-                delete (safePedido as any).volume_faturado;
-                
-                return {
-                    ...safePedido,
-                    volume_total: Number(p.volume_total),
-                    valor_total: Number(p.valor_total),
-                    volume_restante: Number(p.volume_restante)
-                };
-            });
-
-            // Upsert em lotes de 50 para não estourar payload e reduzir chance de timeout
-            const batchSize = 50;
-            
-            for (let i = 0; i < payload.length; i += batchSize) {
-                const batch = payload.slice(i, i + batchSize);
-                
-                // Sistema de Retry (Tentativa Automática)
-                let attempts = 0;
-                const maxAttempts = 3;
-                let saved = false;
-                let lastError = null;
-
-                while (attempts < maxAttempts && !saved) {
-                    try {
-                        attempts++;
-                        const { error } = await supabase.from('pedidos').upsert(batch);
-                        if (error) throw error;
-                        saved = true;
-                    } catch (err: any) {
-                        lastError = err;
-                        console.warn(`Sync tentativa ${attempts} falhou para lote ${i}: ${err.message}. Tentando novamente...`);
-                        // Espera exponencial: 1s, 2s, 4s...
-                        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts - 1)));
-                    }
-                }
-
-                if (!saved && lastError) {
-                    throw lastError; // Se falhar 3x, aborta
-                }
-            }
-
-        } catch (e: any) {
-             throw new Error(`Erro ao salvar no Supabase: ${e.message || e}`);
-        }
-
-        // Log Sucesso
-        const logEntry: LogSincronizacao = {
-            id: `log-${Date.now()}`,
-            data: new Date().toISOString(),
-            tipo: tipo,
-            arquivo: 'Google Drive Sync',
-            sucesso: true,
-            mensagens: [`Sincronização realizada com sucesso.`, `Adicionados: ${added}`, `Atualizados: ${updated}`]
-        };
         
-        localLogs.unshift(logEntry);
-        saveToStorage(STORAGE_KEYS.LOGS, localLogs);
-        try { await supabase.from('app_logs').insert(logEntry); } catch(e) {}
+        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: [`Add: ${added}`, `Upd: ${updated}`] };
+        localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
         
         return { added, updated };
-
     } catch (e: any) {
         const errorMsg = e.message || JSON.stringify(e);
-        console.error("Erro sync:", errorMsg);
-        
-        const logEntry: LogSincronizacao = {
-            id: `log-${Date.now()}`,
-            data: new Date().toISOString(),
-            tipo: tipo,
-            arquivo: 'Google Drive Sync',
-            sucesso: false,
-            mensagens: [`Erro: ${errorMsg}`]
-        };
-        
-        localLogs.unshift(logEntry);
-        saveToStorage(STORAGE_KEYS.LOGS, localLogs);
-        try { await supabase.from('app_logs').insert(logEntry); } catch(e) {}
-        
+        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: false, mensagens: [`Erro: ${errorMsg}`] };
+        localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
         throw e;
     }
   }

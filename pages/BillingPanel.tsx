@@ -1,45 +1,65 @@
-
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
-import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye, Calendar } from 'lucide-react';
+import { User, SolicitacaoFaturamento, StatusSolicitacao, Role, ItemSolicitado, Pedido } from '../types';
+import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye, Calendar, ArrowRight, Package, Calculator } from 'lucide-react';
 
 const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
+  const [pedidosCache, setPedidosCache] = useState<Pedido[]>([]); // Cache de pedidos para buscar preços
   const [activeTab, setActiveTab] = useState<'triage' | 'invoice' | 'rejected'>('triage');
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modal de Envio para Aprovação (Novos campos)
+  // Modal de Envio para Aprovação (Com edição de itens)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [sendId, setSendId] = useState<string | null>(null);
   const [sendPrazo, setSendPrazo] = useState('');
   const [sendObs, setSendObs] = useState('');
+  
+  // Estado para controle dos itens dentro do modal de envio
+  const [analysisItems, setAnalysisItems] = useState<{
+      nome_produto: string;
+      volume_original: number;
+      volume_editado: string;
+      unidade: string;
+      selected: boolean;
+      obs: string;
+  }[]>([]);
 
   // Modal de Desbloqueio
   const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
   const [unblockId, setUnblockId] = useState<string | null>(null);
   const [unblockReason, setUnblockReason] = useState('');
 
+  // Modal de Faturamento com Conferência
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [invoiceSolId, setInvoiceSolId] = useState<string | null>(null);
+  const [invoiceVolumes, setInvoiceVolumes] = useState<Record<string, string>>({});
+  const [currentSolForInvoice, setCurrentSolForInvoice] = useState<SolicitacaoFaturamento | null>(null);
+
   useEffect(() => {
-    api.getSolicitacoes(user).then(setSolicitacoes);
+    // Carrega solicitações e também pedidos (para ter os preços unitários)
+    const loadData = async () => {
+        const [sols, peds] = await Promise.all([
+            api.getSolicitacoes(user),
+            api.getPedidos(user)
+        ]);
+        setSolicitacoes(sols);
+        setPedidosCache(peds);
+    };
+    loadData();
   }, [user]);
 
   useEffect(() => {
     setSearchTerm('');
   }, [activeTab]);
 
-  const handleStatusChange = async (id: string, newStatus: StatusSolicitacao) => {
-    await api.updateSolicitacaoStatus(id, newStatus, user);
-    
+  const updateLocalStatus = (id: string, newStatus: StatusSolicitacao, extraUpdates: Partial<SolicitacaoFaturamento> = {}) => {
     setSolicitacoes(prev => prev.map(s => {
       if (s.id === id) {
-        const updated = { ...s, status: newStatus };
-        
-        // Se estiver enviando para análise, reseta explicitamente as flags locais para
-        // garantir feedback visual imediato de "Aguardando" nos badges.
+        const updated = { ...s, status: newStatus, ...extraUpdates };
         if (newStatus === StatusSolicitacao.EM_ANALISE) {
            updated.aprovacao_comercial = false;
            updated.aprovacao_credito = false;
@@ -55,42 +75,179 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
     }));
   };
 
-  // Funções para Modal de Envio
+  // --- LÓGICA DE FATURAMENTO (INVOICE) ---
+  const openInvoiceModal = (sol: SolicitacaoFaturamento) => {
+      setInvoiceSolId(sol.id);
+      setCurrentSolForInvoice(sol);
+      
+      const initialVolumes: Record<string, string> = {};
+      if (sol.itens_solicitados) {
+          sol.itens_solicitados.forEach(item => {
+              initialVolumes[item.nome_produto] = item.volume.toString();
+          });
+      } else {
+          initialVolumes[sol.nome_produto] = sol.volume_solicitado.toString();
+      }
+      setInvoiceVolumes(initialVolumes);
+      setIsInvoiceModalOpen(true);
+  };
+
+  const handleConfirmInvoice = async () => {
+      if (!invoiceSolId || !currentSolForInvoice) return;
+
+      const itensFaturados: ItemSolicitado[] = [];
+      const originalItems = currentSolForInvoice.itens_solicitados || [{
+          nome_produto: currentSolForInvoice.nome_produto,
+          volume: currentSolForInvoice.volume_solicitado,
+          unidade: currentSolForInvoice.unidade
+      }];
+
+      for (const item of originalItems) {
+          const rawVal = invoiceVolumes[item.nome_produto];
+          const val = parseFloat(rawVal?.replace(',', '.') || '0');
+          if (val > 0) {
+              itensFaturados.push({
+                  nome_produto: item.nome_produto,
+                  volume: val,
+                  unidade: item.unidade
+              });
+          }
+      }
+
+      if (itensFaturados.length === 0) {
+          alert("Atenção: Nenhum volume foi informado.");
+          // return; // Opcional bloquear
+      }
+
+      try {
+          await api.updateSolicitacaoStatus(
+              invoiceSolId, 
+              StatusSolicitacao.FATURADO, 
+              user, 
+              undefined, 
+              undefined, 
+              undefined, 
+              itensFaturados
+          );
+
+          updateLocalStatus(invoiceSolId, StatusSolicitacao.FATURADO, { itens_atendidos: itensFaturados });
+          setIsInvoiceModalOpen(false);
+          setInvoiceSolId(null);
+          setCurrentSolForInvoice(null);
+      } catch (e: any) {
+          alert("Erro ao faturar: " + e.message);
+      }
+  };
+
+  // --- LÓGICA DE ENVIO PARA ANÁLISE (TRIAGEM) ---
   const openSendModal = (id: string) => {
+    const sol = solicitacoes.find(s => s.id === id);
+    if (!sol) return;
+
     setSendId(id);
-    setSendPrazo('');
-    setSendObs('');
+    setSendPrazo(sol.prazo_pedido || '');
+    setSendObs(sol.obs_faturamento || '');
+    
+    // Prepara lista de edição baseada nos itens solicitados
+    if (sol.itens_solicitados) {
+        setAnalysisItems(sol.itens_solicitados.map(i => ({
+            nome_produto: i.nome_produto,
+            volume_original: i.volume,
+            volume_editado: i.volume.toString(),
+            unidade: i.unidade,
+            selected: true,
+            obs: i.obs || ''
+        })));
+    } else {
+        // Fallback
+        setAnalysisItems([{
+            nome_produto: sol.nome_produto,
+            volume_original: sol.volume_solicitado,
+            volume_editado: sol.volume_solicitado.toString(),
+            unidade: sol.unidade,
+            selected: true,
+            obs: ''
+        }]);
+    }
+
     setIsSendModalOpen(true);
+  };
+
+  const toggleAnalysisItem = (idx: number) => {
+      setAnalysisItems(prev => {
+          const next = [...prev];
+          next[idx].selected = !next[idx].selected;
+          return next;
+      });
+  };
+
+  const updateAnalysisItemVolume = (idx: number, val: string) => {
+      setAnalysisItems(prev => {
+          const next = [...prev];
+          next[idx].volume_editado = val;
+          return next;
+      });
+  };
+
+  const updateAnalysisItemObs = (idx: number, val: string) => {
+      setAnalysisItems(prev => {
+          const next = [...prev];
+          next[idx].obs = val;
+          return next;
+      });
   };
 
   const handleConfirmSend = async () => {
     if (!sendId) return;
 
-    // Chama API passando os dados extras
-    await api.updateSolicitacaoStatus(sendId, StatusSolicitacao.EM_ANALISE, user, undefined, undefined, {
-        prazo: sendPrazo,
-        obs_faturamento: sendObs
-    });
+    // Filtra e prepara os itens que realmente vão para análise
+    const itemsToSend: ItemSolicitado[] = [];
+    
+    for (const item of analysisItems) {
+        if (item.selected) {
+            const vol = parseFloat(item.volume_editado.replace(',', '.'));
+            if (vol > 0) {
+                itemsToSend.push({
+                    nome_produto: item.nome_produto,
+                    volume: vol,
+                    unidade: item.unidade,
+                    obs: item.obs
+                });
+            }
+        }
+    }
 
-    // Atualiza estado local
-    setSolicitacoes(prev => prev.map(s => {
-      if (s.id === sendId) {
-        return { 
-           ...s, 
-           status: StatusSolicitacao.EM_ANALISE,
-           prazo_pedido: sendPrazo || undefined,
-           obs_faturamento: sendObs || undefined,
-           aprovacao_comercial: false,
-           aprovacao_credito: false,
-           blocked_by: undefined,
-           motivo_rejeicao: undefined,
-           obs_comercial: undefined,
-           obs_credito: undefined,
-           aprovado_por: undefined
-        };
-      }
-      return s;
-    }));
+    if (itemsToSend.length === 0) {
+        alert("Selecione pelo menos um item para enviar para análise.");
+        return;
+    }
+
+    // A API agora aceita 'itensAtendidos' (neste contexto, itens revisados) para recalcular o saldo da carteira
+    // O que não estiver nesta lista voltará para a carteira (volume_restante do pedido)
+    await api.updateSolicitacaoStatus(
+        sendId, 
+        StatusSolicitacao.EM_ANALISE, 
+        user, 
+        undefined, 
+        undefined, 
+        {
+            prazo: sendPrazo,
+            obs_faturamento: sendObs
+        },
+        itemsToSend // Passa os itens revisados
+    );
+
+    // Atualiza volume_solicitado visual localmente para refletir o novo total
+    const novoVolumeTotal = itemsToSend.reduce((acc, i) => acc + i.volume, 0);
+    const novoResumoProdutos = itemsToSend.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
+
+    updateLocalStatus(sendId, StatusSolicitacao.EM_ANALISE, { 
+        prazo_pedido: sendPrazo, 
+        obs_faturamento: sendObs,
+        itens_solicitados: itemsToSend,
+        volume_solicitado: novoVolumeTotal,
+        nome_produto: novoResumoProdutos
+    });
 
     setIsSendModalOpen(false);
     setSendId(null);
@@ -106,7 +263,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
     if (!unblockId || !unblockReason.trim()) return;
     try {
       await api.unblockSolicitacao(unblockId, user); 
-      // Refresh complete data
       const updated = await api.getSolicitacoes(user);
       setSolicitacoes(updated);
       setIsUnblockModalOpen(false);
@@ -124,15 +280,13 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
 
   const handleConfirmRejection = async () => {
     if (!rejectId || !rejectReason.trim()) return;
-    // Passa Role.FATURAMENTO explicitamente para garantir que o bloqueio seja atribuído ao setor correto
     await api.updateSolicitacaoStatus(rejectId, StatusSolicitacao.REJEITADO, user, rejectReason, Role.FATURAMENTO);
     const formattedReason = `[BLOQUEIO: FATURAMENTO] ${rejectReason}`;
-    setSolicitacoes(prev => prev.map(s => s.id === rejectId ? { ...s, status: StatusSolicitacao.REJEITADO, motivo_rejeicao: formattedReason, blocked_by: Role.FATURAMENTO } : s));
+    updateLocalStatus(rejectId, StatusSolicitacao.REJEITADO, { motivo_rejeicao: formattedReason, blocked_by: Role.FATURAMENTO });
     setIsRejectModalOpen(false);
     setRejectId(null);
   };
 
-  // Listas filtradas estritamente pelo status
   const triageList = solicitacoes.filter(s => s.status === StatusSolicitacao.PENDENTE);
   const invoiceList = solicitacoes.filter(s => s.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO);
   const rejectedList = solicitacoes.filter(s => s.status === StatusSolicitacao.REJEITADO);
@@ -147,8 +301,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
     }
   };
 
-  const sourceList = getSourceList();
-  const filteredList = sourceList.filter(s => 
+  const filteredList = getSourceList().filter(s => 
     s.nome_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.numero_pedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.criado_por.toLowerCase().includes(searchTerm.toLowerCase())
@@ -199,7 +352,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
             <input type="text" placeholder="Filtrar por Cliente, Pedido..." className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-crop-500 focus:border-transparent transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
             {searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"><X size={16} /></button>)}
          </div>
-         <div className="text-xs text-slate-500 font-medium">Exibindo {filteredList.length} de {sourceList.length} registros</div>
+         <div className="text-xs text-slate-500 font-medium">Exibindo {filteredList.length} de {getSourceList().length} registros</div>
        </div>
 
        {inProgressList.length > 0 && activeTab === 'triage' && (
@@ -216,8 +369,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                <div>
                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span>
                  <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>{sol.nome_cliente}</h4>
-                 
-                 {/* Exibir setor responsável pelo bloqueio no cabeçalho */}
                  {sol.status === StatusSolicitacao.REJEITADO && (
                     <div className="mt-2 flex items-center gap-1.5">
                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bloqueio:</span>
@@ -237,11 +388,39 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                {/* Exibir Produto */}
                <div className="mb-2 pb-2 border-b border-slate-50">
                    <p className="text-[10px] text-slate-400 font-bold uppercase">Produto</p>
-                   <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
+                   {sol.itens_solicitados && sol.itens_solicitados.length > 1 ? (
+                       <ul className="space-y-1 mt-1">
+                           {sol.itens_solicitados.map((item, idx) => (
+                               <li key={idx} className="flex justify-between text-xs text-slate-700">
+                                   <span>{item.nome_produto}</span>
+                                   <div className="flex flex-col items-end">
+                                      <span className="font-bold">{item.volume} {item.unidade}</span>
+                                      {item.obs && <span className="text-[9px] text-slate-400 italic">Obs: {item.obs}</span>}
+                                   </div>
+                               </li>
+                           ))}
+                       </ul>
+                   ) : (
+                       <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
+                   )}
                </div>
-               <div className="flex justify-between items-end"><div><p className="text-xs text-slate-500 font-semibold uppercase">Volume Solicitado</p><p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p></div></div>
                
-               {/* Exibir Status de Aprovação Paralela se estiver EM_ANALISE ou APROVADO */}
+               <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-xs text-slate-500 font-semibold uppercase">Volume Solicitado</p>
+                    <p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p>
+                  </div>
+                  <div className="text-right">
+                       <p className="text-xs text-slate-500 font-semibold uppercase">Valor Solicitado</p>
+                       <p className="text-xl font-bold text-slate-900">
+                         {sol.valor_solicitado 
+                            ? sol.valor_solicitado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
+                            : <span className="text-slate-400 text-sm">Não calc.</span>
+                         }
+                       </p>
+                   </div>
+               </div>
+               
                {(sol.status === StatusSolicitacao.EM_ANALISE || sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO) && (
                    <div className="flex gap-2 flex-wrap mt-2">
                        {sol.aprovacao_comercial ? (
@@ -266,7 +445,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                    </div>
                )}
 
-               {/* Exibir Observações do Faturamento/Envio */}
                {(sol.prazo_pedido || sol.obs_faturamento) && (
                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2 space-y-1">
                       {sol.prazo_pedido && (
@@ -294,24 +472,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                    </div>
                )}
 
-               {/* Exibir Observações de Aprovação */}
-               {(sol.obs_comercial || sol.obs_credito) && (
-                  <div className="flex flex-col gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
-                     {sol.obs_comercial && (
-                         <div className="flex items-start gap-2 text-[10px] text-blue-700">
-                             <MessageSquare size={12} className="mt-0.5 shrink-0" />
-                             <div><span className="font-bold">Comercial:</span> {sol.obs_comercial}</div>
-                         </div>
-                     )}
-                     {sol.obs_credito && (
-                         <div className="flex items-start gap-2 text-[10px] text-indigo-700">
-                             <MessageSquare size={12} className="mt-0.5 shrink-0" />
-                             <div><span className="font-bold">Crédito:</span> {sol.obs_credito}</div>
-                         </div>
-                     )}
-                  </div>
-               )}
-
                {sol.status === StatusSolicitacao.REJEITADO && sol.motivo_rejeicao && (
                  <div className="bg-red-50 p-3 rounded-lg border border-red-100">
                     <div className="flex items-center justify-between mb-1">
@@ -330,7 +490,6 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
              
              {/* ÁREA DE AÇÕES */}
              <div className="p-4 bg-slate-50 border-t border-slate-100">
-               
                {user.role === Role.GERENTE ? (
                  <div className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-100/50 rounded-lg border border-slate-200 border-dashed text-center flex items-center justify-center gap-2 cursor-default">
                     <Eye size={14} /> Visualização Gerencial (Apenas Leitura)
@@ -349,7 +508,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                         <button onClick={() => openRejectModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2">
                           <XCircle size={14} /> Rejeitar
                         </button>
-                        <button onClick={() => handleStatusChange(sol.id, StatusSolicitacao.FATURADO)} className="flex-[2] px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2">
+                        <button onClick={() => openInvoiceModal(sol)} className="flex-[2] px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2">
                           <FileCheck size={14} /> Faturar
                         </button>
                      </div>
@@ -403,45 +562,193 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
          </div>
        )}
 
-       {/* Modal de Envio para Aprovação (Novo) */}
+       {/* Modal de Envio para Aprovação */}
        {isSendModalOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
              <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-blue-50/50">
                <div className="p-2 bg-blue-100 rounded-full text-blue-600"><Send size={24} /></div>
-               <h3 className="text-lg font-bold text-slate-800">Enviar para Aprovação</h3>
+               <h3 className="text-lg font-bold text-slate-800">Enviar para Análise</h3>
              </div>
-             <div className="p-6 space-y-5">
-               <p className="text-sm text-slate-600">Preencha os dados abaixo para encaminhar a solicitação aos setores Comercial e de Crédito.</p>
-               
-               <div className="space-y-1.5">
-                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                      <Calendar size={12} /> Prazo do Pedido
-                   </label>
-                   <input 
-                      type="text" 
-                      placeholder="Ex: 30 dias, 30/60/90..." 
-                      value={sendPrazo}
-                      onChange={e => setSendPrazo(e.target.value)}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm font-medium"
-                   />
+             
+             <div className="flex-1 overflow-y-auto p-6 space-y-5">
+               <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <span className="font-bold">Instrução:</span> Selecione os itens que possuem estoque disponível. Itens desmarcados ou com volume reduzido retornarão automaticamente para a carteira.
+               </p>
+
+               {/* LISTA DE ITENS PARA EDIÇÃO */}
+               <div className="space-y-3">
+                   {analysisItems.map((item, idx) => (
+                       <div key={idx} className={`border rounded-xl p-3 transition-all ${item.selected ? 'bg-white border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+                           <div className="flex items-center gap-3 mb-2">
+                               <input 
+                                  type="checkbox" 
+                                  checked={item.selected} 
+                                  onChange={() => toggleAnalysisItem(idx)}
+                                  className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
+                               />
+                               <div className="flex-1 min-w-0">
+                                   <p className={`text-sm font-bold truncate ${item.selected ? 'text-slate-800' : 'text-slate-500'}`}>{item.nome_produto}</p>
+                                   <p className="text-[10px] text-slate-400">Solicitado: {item.volume_original} {item.unidade}</p>
+                               </div>
+                           </div>
+                           
+                           {item.selected && (
+                               <div className="grid grid-cols-3 gap-3 ml-8 animate-fade-in">
+                                   <div className="col-span-1">
+                                       <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Volume</label>
+                                       <input 
+                                          type="number" 
+                                          value={item.volume_editado}
+                                          onChange={e => updateAnalysisItemVolume(idx, e.target.value)}
+                                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-1 focus:ring-blue-500 outline-none"
+                                          max={item.volume_original}
+                                       />
+                                   </div>
+                                   <div className="col-span-2">
+                                       <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Observação do Item</label>
+                                       <input 
+                                          type="text" 
+                                          value={item.obs}
+                                          onChange={e => updateAnalysisItemObs(idx, e.target.value)}
+                                          placeholder="Ex: Lote específico..."
+                                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 focus:ring-1 focus:ring-blue-500 outline-none"
+                                       />
+                                   </div>
+                               </div>
+                           )}
+                       </div>
+                   ))}
                </div>
 
+               <div className="space-y-1.5 border-t border-slate-100 pt-4">
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Prazo do Pedido</label>
+                   <input type="text" placeholder="Ex: 30 dias, 30/60/90..." value={sendPrazo} onChange={e => setSendPrazo(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm font-medium" />
+               </div>
+               
                <div className="space-y-1.5">
-                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                      <MessageSquare size={12} /> Observação do Faturamento (Opcional)
-                   </label>
-                   <textarea 
-                      value={sendObs}
-                      onChange={e => setSendObs(e.target.value)}
-                      placeholder="Alguma nota importante para os aprovadores?" 
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm min-h-[80px]"
-                   />
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><MessageSquare size={12} /> Obs. Geral (Opcional)</label>
+                   <textarea value={sendObs} onChange={e => setSendObs(e.target.value)} placeholder="Alguma nota importante para os aprovadores?" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm min-h-[60px]" />
                </div>
              </div>
+
              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
                <button onClick={() => setIsSendModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
-               <button onClick={handleConfirmSend} disabled={!sendPrazo.trim()} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirmar Envio</button>
+               <button onClick={handleConfirmSend} disabled={!sendPrazo.trim()} className="flex-[2] px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2">
+                   <Send size={16} /> Confirmar Envio
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Modal de Conferência de Faturamento */}
+       {isInvoiceModalOpen && currentSolForInvoice && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+             <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-emerald-50/50">
+               <div className="p-2 bg-emerald-100 rounded-full text-emerald-600"><FileCheck size={24} /></div>
+               <h3 className="text-lg font-bold text-slate-800">Conferência de Faturamento</h3>
+             </div>
+             
+             <div className="p-6 space-y-4 overflow-y-auto">
+               <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-3">
+                  <Calculator size={18} className="text-blue-600 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                      <p className="font-bold">Regra de Faturamento:</p>
+                      <p className="text-xs mt-1">O valor a ser debitado será calculado multiplicando o <strong>Valor Unitário Original</strong> pela <strong>Quantidade Faturada</strong> informada abaixo. O saldo não faturado retornará automaticamente para a carteira.</p>
+                  </div>
+               </div>
+               
+               <div className="space-y-3">
+                   {currentSolForInvoice.itens_solicitados ? (
+                       currentSolForInvoice.itens_solicitados.map((item, idx) => {
+                           // Busca o valor unitário no pedido original cached
+                           const pedidoOrig = pedidosCache.find(p => p.id === currentSolForInvoice.pedido_id);
+                           const itemPedido = pedidoOrig?.itens.find(i => i.nome_produto === item.nome_produto);
+                           const valorUnitario = itemPedido ? itemPedido.valor_unitario : 0;
+                           const volumeFaturado = parseFloat(invoiceVolumes[item.nome_produto]?.replace(',', '.') || '0');
+                           const totalFaturar = volumeFaturado * valorUnitario;
+
+                           return (
+                               <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                   <div className="flex justify-between mb-3 border-b border-slate-200/60 pb-2">
+                                       <span className="text-sm font-bold text-slate-800">{item.nome_produto}</span>
+                                       <span className="text-xs bg-slate-200 px-2 py-0.5 rounded text-slate-600 font-mono">Solicitado: {item.volume} {item.unidade}</span>
+                                   </div>
+                                   
+                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                                       {/* Coluna 1: Preço Unitário (ReadOnly) */}
+                                       <div className="flex flex-col">
+                                           <span className="text-[10px] font-bold text-slate-400 uppercase">Valor Unitário</span>
+                                           <span className="text-sm font-bold text-slate-700">{valorUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                       </div>
+
+                                       {/* Coluna 2: Input Volume */}
+                                       <div className="flex flex-col">
+                                           <label className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Qtd. a Faturar</label>
+                                           <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="number"
+                                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                    value={invoiceVolumes[item.nome_produto] || ''}
+                                                    onChange={e => {
+                                                        const val = parseFloat(e.target.value);
+                                                        if (val <= item.volume) {
+                                                            setInvoiceVolumes(prev => ({...prev, [item.nome_produto]: e.target.value}));
+                                                        }
+                                                    }}
+                                                    max={item.volume}
+                                                    min={0}
+                                                />
+                                                <span className="text-xs font-bold text-slate-500">{item.unidade}</span>
+                                           </div>
+                                       </div>
+
+                                       {/* Coluna 3: Total Calculado */}
+                                       <div className="flex flex-col items-end bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                                           <span className="text-[10px] font-bold text-emerald-700 uppercase">Subtotal (Débito)</span>
+                                           <span className="text-lg font-extrabold text-emerald-900">
+                                               {totalFaturar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                           </span>
+                                       </div>
+                                   </div>
+                               </div>
+                           );
+                       })
+                   ) : (
+                       // Fallback para solicitações antigas sem itens detalhados
+                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                           <div className="flex justify-between mb-2">
+                               <span className="text-xs font-bold text-slate-700">{currentSolForInvoice.nome_produto}</span>
+                               <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded text-slate-600">Solicitado: {currentSolForInvoice.volume_solicitado}</span>
+                           </div>
+                           <div className="relative">
+                               <span className="absolute left-3 top-2.5 text-xs font-bold text-emerald-600">Faturar:</span>
+                               <input 
+                                  type="number"
+                                  className="w-full pl-16 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                  value={invoiceVolumes[currentSolForInvoice.nome_produto] || ''}
+                                  onChange={e => {
+                                      const val = parseFloat(e.target.value);
+                                      if (val <= currentSolForInvoice.volume_solicitado) {
+                                          setInvoiceVolumes(prev => ({...prev, [currentSolForInvoice.nome_produto]: e.target.value}));
+                                      }
+                                  }}
+                                  max={currentSolForInvoice.volume_solicitado}
+                                  min={0}
+                               />
+                           </div>
+                       </div>
+                   )}
+               </div>
+             </div>
+
+             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
+               <button onClick={() => setIsInvoiceModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
+               <button onClick={handleConfirmInvoice} className="flex-[2] px-4 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20 transition-all text-sm flex items-center justify-center gap-2">
+                   <CheckCircle2 size={18} /> Confirmar Emissão
+               </button>
              </div>
            </div>
          </div>

@@ -1,5 +1,9 @@
 
 
+
+
+
+
 export enum Role {
   ADMIN = 'ADMIN',
   GERENTE = 'GERENTE',
@@ -36,31 +40,53 @@ export interface User {
   sales_codes?: string[]; // Códigos do vendedor no ERP (pode ter mais de um)
 }
 
+export interface PedidoItem {
+  id: string; // ID único do item (pode ser gerado)
+  nome_produto: string;
+  unidade: string;
+  volume_total: number;
+  volume_restante: number;
+  volume_faturado: number;
+  valor_unitario: number;
+  valor_total: number;
+}
+
 export interface Pedido {
   id: string;
   numero_pedido: string;
   codigo_cliente: string;
   nome_cliente: string;
-  nome_produto: string;
-  unidade: string;
   
-  // Volumes
+  // Array de Produtos
+  itens: PedidoItem[];
+
+  // Campos Agregados (Legado + Visualização Rápida)
+  nome_produto: string; // Resumo ou nome do principal
+  unidade: string; // Unidade predominante ou 'Mix'
+  
+  // Volumes Totais (Soma dos itens)
   volume_total: number;
-  volume_restante: number; // Disponível para solicitar
-  volume_faturado: number; // Efetivamente faturado (NF emitida)
+  volume_restante: number; 
+  volume_faturado: number; 
   
-  // Valores
+  // Valores Totais (Soma dos itens)
   valor_total: number;
-  valor_faturado: number; // Soma do valor das NFs emitidas
+  valor_faturado: number;
   
   codigo_vendedor: string;
   nome_vendedor: string;
   
-  // Status e Controle
   status: StatusPedido;
-  setor_atual?: Role; // Onde o pedido está "parado" ou sendo processado
-  motivo_status?: string; // Último motivo relevante
+  setor_atual?: Role; 
+  motivo_status?: string; 
   data_criacao: string;
+}
+
+export interface ItemSolicitado {
+  nome_produto: string;
+  volume: number;
+  unidade: string;
+  obs?: string; // Observação específica do item (ex: Faturamento)
 }
 
 export interface SolicitacaoFaturamento {
@@ -68,9 +94,18 @@ export interface SolicitacaoFaturamento {
   pedido_id: string;
   numero_pedido: string;
   nome_cliente: string;
-  nome_produto: string;
+  
+  // Campo legado para compatibilidade visual (contém resumo: "Prod A: 10 | Prod B: 20")
+  nome_produto: string; 
   unidade: string;
-  volume_solicitado: number;
+  volume_solicitado: number; // Soma dos volumes para KPI
+  valor_solicitado?: number; // Valor monetário total da solicitação
+  
+  // Detalhe real da solicitação
+  itens_solicitados?: ItemSolicitado[];
+  // Detalhe do que foi efetivamente faturado (se diferente do solicitado)
+  itens_atendidos?: ItemSolicitado[];
+
   status: StatusSolicitacao;
   status_pedido?: string;
   criado_por: string;
@@ -83,7 +118,6 @@ export interface SolicitacaoFaturamento {
   obs_credito?: string;
   obs_vendedor?: string;
   
-  // Novos campos para fluxo de faturamento
   prazo_pedido?: string;
   obs_faturamento?: string;
   
@@ -96,8 +130,8 @@ export interface HistoricoEvento {
   data_evento: string;
   usuario: string;
   setor: Role | string;
-  acao: string; // ex: 'Solicitação Criada', 'Aprovado Comercial', 'Faturado', 'Rejeitado'
-  detalhes?: string; // Motivo, valores, observações
+  acao: string; 
+  detalhes?: string; 
   tipo: 'SUCESSO' | 'ERRO' | 'INFO' | 'ALERTA';
 }
 

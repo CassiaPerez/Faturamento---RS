@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
@@ -169,7 +163,22 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                    <p className="text-[10px] text-slate-400 font-bold uppercase">Produto</p>
                    <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
                </div>
-               <div><p className="text-xs text-slate-500 font-semibold uppercase">Volume</p><p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p></div>
+               
+               <div className="flex justify-between items-end">
+                   <div>
+                       <p className="text-xs text-slate-500 font-semibold uppercase">Volume</p>
+                       <p className="text-xl font-bold text-slate-800">{sol.volume_solicitado.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p>
+                   </div>
+                   <div className="text-right">
+                       <p className="text-xs text-slate-500 font-semibold uppercase">Valor Solicitado</p>
+                       <p className="text-xl font-bold text-slate-900">
+                         {sol.valor_solicitado 
+                            ? sol.valor_solicitado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
+                            : <span className="text-slate-400 text-sm">Não calc.</span>
+                         }
+                       </p>
+                   </div>
+               </div>
                
                {/* Mostrar observação do comercial se houver */}
                {sol.obs_comercial && (
