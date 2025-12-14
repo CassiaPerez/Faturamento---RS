@@ -180,121 +180,395 @@ const generateBlockEmailTemplate = (data: {
   rejectedItems?: string;
 }) => {
   const currentYear = new Date().getFullYear();
-  
+
   return `
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Notificação Cropflow</title>
+      <title>Notificação Cropflow - Pedido Bloqueado</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-        body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Inter', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b; }
-        .wrapper { width: 100%; table-layout: fixed; background-color: #f1f5f9; padding-bottom: 40px; }
-        .webkit { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
-        .header { background: linear-gradient(135deg, #15803d 0%, #166534 100%); padding: 32px 40px; text-align: center; }
-        .brand { color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin: 0; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .status-bar { background-color: #fee2e2; color: #991b1b; padding: 12px; text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #fecaca; }
-        .content { padding: 40px 40px 30px 40px; }
-        .greeting { font-size: 18px; color: #0f172a; margin-bottom: 8px; font-weight: 600; }
-        .intro { font-size: 15px; color: #64748b; line-height: 1.6; margin-top: 0; margin-bottom: 30px; }
-        
-        .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 25px; }
-        .info-row { padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-        .info-row:last-child { border-bottom: none; }
-        .info-col { width: 48%; }
-        .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
-        .value { font-size: 14px; font-weight: 600; color: #334155; margin: 0; display: block; }
-        
-        .reason-box { background-color: #fff1f2; border-left: 4px solid #f43f5e; padding: 25px; border-radius: 6px; margin-bottom: 30px; }
-        .reason-title { color: #be123c; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; }
-        .reason-text { color: #881337; font-size: 15px; line-height: 1.5; font-weight: 500; }
-        
-        .items-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #fecdd3; }
-        .items-title { font-size: 12px; font-weight: 700; color: #be123c; margin-bottom: 5px; }
-        .items-text { font-size: 13px; color: #9f1239; line-height: 1.4; background: rgba(255,255,255,0.5); padding: 8px; border-radius: 4px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-        .btn-container { text-align: center; margin-top: 10px; margin-bottom: 10px; }
-        .btn { display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 50px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); transition: all 0.2s; }
-        
-        .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 30px; text-align: center; }
-        .footer-text { font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
-        .footer-sub { font-size: 11px; color: #cbd5e1; }
-        
-        /* Mobile fixes */
+        * { box-sizing: border-box; }
+
+        body {
+          margin: 0;
+          padding: 0;
+          background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        .wrapper {
+          width: 100%;
+          padding: 40px 20px;
+          background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+        }
+
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 20px 25px -5px rgba(220, 38, 38, 0.1), 0 10px 10px -5px rgba(220, 38, 38, 0.04);
+        }
+
+        .header {
+          background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+          padding: 40px 40px 35px 40px;
+          text-align: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .header::before {
+          content: '';
+          position: absolute;
+          top: -50%;
+          left: -50%;
+          width: 200%;
+          height: 200%;
+          background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+          animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.5; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .brand-container {
+          position: relative;
+          z-index: 1;
+        }
+
+        .brand {
+          color: #ffffff;
+          font-size: 28px;
+          font-weight: 800;
+          letter-spacing: 1px;
+          margin: 0 0 8px 0;
+          text-transform: uppercase;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .brand-subtitle {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 13px;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+          margin: 0;
+        }
+
+        .alert-banner {
+          background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+          color: #ffffff;
+          padding: 18px 24px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 1.2px;
+          text-transform: uppercase;
+          box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+        }
+
+        .alert-icon {
+          font-size: 24px;
+          animation: shake 0.5s infinite;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-5deg); }
+          75% { transform: rotate(5deg); }
+        }
+
+        .content {
+          padding: 45px 40px;
+          background: #ffffff;
+        }
+
+        .greeting {
+          font-size: 20px;
+          color: #0f172a;
+          margin: 0 0 6px 0;
+          font-weight: 700;
+        }
+
+        .manager-copy {
+          font-size: 13px;
+          color: #64748b;
+          margin: 0 0 24px 0;
+          font-weight: 500;
+        }
+
+        .intro {
+          font-size: 15px;
+          color: #475569;
+          line-height: 1.7;
+          margin: 0 0 32px 0;
+          font-weight: 400;
+        }
+
+        .info-card {
+          background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+          border: 2px solid #fecaca;
+          border-radius: 12px;
+          overflow: hidden;
+          margin-bottom: 28px;
+          box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.05);
+        }
+
+        .info-row {
+          padding: 18px 24px;
+          border-bottom: 1px solid #fee2e2;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+        }
+
+        .info-row:last-child {
+          border-bottom: none;
+        }
+
+        .info-col {
+          flex: 1;
+        }
+
+        .label {
+          font-size: 11px;
+          text-transform: uppercase;
+          color: #ef4444;
+          font-weight: 800;
+          letter-spacing: 0.8px;
+          margin-bottom: 6px;
+          display: block;
+        }
+
+        .value {
+          font-size: 15px;
+          font-weight: 600;
+          color: #0f172a;
+          margin: 0;
+          display: block;
+          word-wrap: break-word;
+        }
+
+        .value-highlight {
+          color: #dc2626;
+          font-weight: 700;
+        }
+
+        .reason-box {
+          background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+          border-radius: 12px;
+          padding: 28px;
+          margin-bottom: 32px;
+          box-shadow: 0 10px 15px -3px rgba(220, 38, 38, 0.3), 0 4px 6px -2px rgba(220, 38, 38, 0.1);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .reason-box::before {
+          content: '⚠';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          font-size: 120px;
+          opacity: 0.1;
+          transform: rotate(15deg);
+        }
+
+        .reason-title {
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin: 0 0 14px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .reason-text {
+          color: #ffffff;
+          font-size: 16px;
+          line-height: 1.6;
+          font-weight: 500;
+          margin: 0;
+          position: relative;
+          z-index: 1;
+        }
+
+        .items-section {
+          margin-top: 20px;
+          padding-top: 20px;
+          border-top: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .items-title {
+          font-size: 12px;
+          font-weight: 800;
+          color: #ffffff;
+          margin: 0 0 10px 0;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+        }
+
+        .items-text {
+          font-size: 14px;
+          color: #fef2f2;
+          line-height: 1.6;
+          background: rgba(0, 0, 0, 0.15);
+          padding: 12px 16px;
+          border-radius: 8px;
+          border-left: 3px solid #fef2f2;
+          margin: 0;
+        }
+
+        .btn-container {
+          text-align: center;
+          margin: 0 0 8px 0;
+        }
+
+        .btn {
+          display: inline-block;
+          background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+          color: #ffffff;
+          text-decoration: none;
+          padding: 16px 40px;
+          border-radius: 10px;
+          font-weight: 700;
+          font-size: 15px;
+          box-shadow: 0 10px 15px -3px rgba(220, 38, 38, 0.3), 0 4px 6px -2px rgba(220, 38, 38, 0.1);
+          transition: all 0.3s ease;
+          letter-spacing: 0.3px;
+        }
+
+        .btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 15px 20px -3px rgba(220, 38, 38, 0.4);
+        }
+
+        .footer {
+          background: linear-gradient(to bottom, #fef2f2, #fff1f2);
+          border-top: 1px solid #fecaca;
+          padding: 32px 40px;
+          text-align: center;
+        }
+
+        .footer-text {
+          font-size: 13px;
+          color: #64748b;
+          margin: 0 0 6px 0;
+          font-weight: 500;
+        }
+
+        .footer-sub {
+          font-size: 12px;
+          color: #94a3b8;
+          margin: 0;
+          font-weight: 400;
+        }
+
         @media only screen and (max-width: 600px) {
-          .info-row { display: block; }
-          .info-col { width: 100%; margin-bottom: 15px; }
-          .info-col:last-child { margin-bottom: 0; }
-          .content { padding: 30px 20px; }
+          .wrapper { padding: 20px 10px; }
+          .content { padding: 32px 24px; }
+          .header { padding: 32px 24px 28px 24px; }
+          .info-row {
+            flex-direction: column;
+            gap: 16px;
+          }
+          .info-col { width: 100%; }
+          .reason-box { padding: 24px 20px; }
+          .footer { padding: 28px 24px; }
+          .brand { font-size: 24px; }
         }
       </style>
     </head>
     <body>
       <div class="wrapper">
-        <div class="webkit">
+        <div class="container">
           <div class="header">
-            <h1 class="brand">CROPFLOW</h1>
+            <div class="brand-container">
+              <h1 class="brand">CROPFLOW</h1>
+              <p class="brand-subtitle">Sistema de Gestão Comercial</p>
+            </div>
           </div>
-          
-          <div class="status-bar">
-            ⚠️ Pedido Bloqueado / Devolvido
+
+          <div class="alert-banner">
+            <span class="alert-icon">⛔</span>
+            <span>PEDIDO BLOQUEADO / DEVOLVIDO</span>
+            <span class="alert-icon">⛔</span>
           </div>
-          
+
           <div class="content">
             <p class="greeting">Olá, ${data.vendorName}</p>
-            ${data.managerName ? `<p style="font-size:12px; color:#94a3b8; margin-top:-5px; margin-bottom:15px;">(Cópia para: ${data.managerName})</p>` : ''}
-            
-            <p class="intro">Identificamos uma pendência que impede o prosseguimento do faturamento. Por favor, verifique os detalhes abaixo e tome as providências necessárias.</p>
-            
+            ${data.managerName ? `<p class="manager-copy">📋 Cópia para: <strong>${data.managerName}</strong></p>` : ''}
+
+            <p class="intro">
+              Identificamos uma <strong>pendência crítica</strong> que impede o prosseguimento do faturamento do seu pedido.
+              Por favor, <strong>verifique os detalhes abaixo</strong> e tome as providências necessárias o mais breve possível.
+            </p>
+
             <div class="info-card">
               <div class="info-row">
                 <div class="info-col">
-                  <span class="label">Número do Pedido</span>
-                  <span class="value" style="font-family: monospace; font-size: 15px;">${data.orderNumber}</span>
+                  <span class="label">📋 Número do Pedido</span>
+                  <span class="value" style="font-family: 'Courier New', monospace; font-size: 16px;">${data.orderNumber}</span>
                 </div>
                 <div class="info-col">
-                  <span class="label">Cliente</span>
+                  <span class="label">👤 Cliente</span>
                   <span class="value">${data.clientName}</span>
                 </div>
               </div>
               <div class="info-row">
                 <div class="info-col">
-                  <span class="label">Bloqueado Por</span>
-                  <span class="value">${data.blockerName}</span>
+                  <span class="label">🚫 Bloqueado Por</span>
+                  <span class="value value-highlight">${data.blockerName}</span>
                 </div>
                 <div class="info-col">
-                  <span class="label">Setor Responsável</span>
-                  <span class="value" style="color: #ef4444;">${data.blockerRole}</span>
+                  <span class="label">🏢 Setor Responsável</span>
+                  <span class="value value-highlight">${data.blockerRole}</span>
                 </div>
               </div>
             </div>
 
             <div class="reason-box">
               <div class="reason-title">
-                Motivo da Devolução
+                <span>⚠️</span>
+                <span>MOTIVO DO BLOQUEIO</span>
               </div>
               <div class="reason-text">
                 ${data.reason}
               </div>
-              
+
               ${data.rejectedItems ? `
                 <div class="items-section">
-                  <div class="items-title">Itens Afetados:</div>
+                  <div class="items-title">📦 Itens Afetados:</div>
                   <div class="items-text">${data.rejectedItems}</div>
                 </div>
               ` : ''}
             </div>
 
             <div class="btn-container">
-              <a href="https://cropflow-app.vercel.app/" class="btn">Acessar Sistema para Corrigir</a>
+              <a href="https://cropflow-app.vercel.app/" class="btn">🔓 Acessar Sistema para Corrigir</a>
             </div>
           </div>
-          
+
           <div class="footer">
-            <p class="footer-text">&copy; ${currentYear} Grupo Cropfield. Todos os direitos reservados.</p>
-            <p class="footer-sub">Mensagem automática gerada pelo sistema Cropflow.</p>
+            <p class="footer-text">© ${currentYear} Grupo Cropfield. Todos os direitos reservados.</p>
+            <p class="footer-sub">Mensagem automática gerada pelo sistema Cropflow • Não responda este email</p>
           </div>
         </div>
       </div>
