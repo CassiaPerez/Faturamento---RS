@@ -62,19 +62,15 @@
     }
     </script>
     <style>
-      /* Fallback crítico para esconder conteúdo até o CSS carregar */
-      body { visibility: hidden; } 
-      body.loaded { visibility: visible; }
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
-    <script>
-      // Mostra o corpo apenas quando o DOM estiver pronto para evitar FOUC
-      window.addEventListener('DOMContentLoaded', () => {
-        document.body.classList.add('loaded');
-      });
-    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
