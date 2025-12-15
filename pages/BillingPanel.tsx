@@ -7,7 +7,7 @@ import OrderDetailsModal from '../components/OrderDetailsModal';
 const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
   const [pedidosCache, setPedidosCache] = useState<Pedido[]>([]); // Cache de pedidos para buscar preços
-  const [activeTab, setActiveTab] = useState<'triage' | 'invoice' | 'rejected'>('triage');
+  const [activeTab, setActiveTab] = useState<'triage' | 'invoice' | 'rejected' | 'history'>('triage');
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -347,12 +347,14 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const invoiceList = solicitacoes.filter(s => s.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO);
   const rejectedList = solicitacoes.filter(s => s.status === StatusSolicitacao.REJEITADO);
   const inProgressList = solicitacoes.filter(s => s.status === StatusSolicitacao.EM_ANALISE);
+  const historyList = solicitacoes.filter(s => s.status === StatusSolicitacao.FATURADO);
 
   const getSourceList = () => {
     switch (activeTab) {
-      case 'triage': return [...triageList, ...inProgressList]; 
+      case 'triage': return [...triageList, ...inProgressList];
       case 'invoice': return invoiceList;
       case 'rejected': return rejectedList;
+      case 'history': return historyList;
       default: return [];
     }
   };
@@ -398,6 +400,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
               <button onClick={() => setActiveTab('triage')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'triage' ? 'bg-crop-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Acompanhamento ({triageList.length + inProgressList.length})</button>
               <button onClick={() => setActiveTab('invoice')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'invoice' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Emitir Notas ({invoiceList.length})</button>
               <button onClick={() => setActiveTab('rejected')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'rejected' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Bloqueados ({rejectedList.length})</button>
+              <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Histórico ({historyList.length})</button>
            </div>
          </div>
        </div>
@@ -438,9 +441,9 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                  )}
                </div>
                
-               <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border flex items-center gap-1 ${sol.status === StatusSolicitacao.PENDENTE ? 'bg-orange-50 text-orange-700 border-orange-100' : sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : sol.status === StatusSolicitacao.REJEITADO ? 'bg-red-50 text-red-700 border-red-100' : 'bg-slate-100' }`}>
-                  <Clock size={10} />
-                  {sol.status === StatusSolicitacao.PENDENTE ? 'Triagem' : sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'Pronto' : sol.status === StatusSolicitacao.REJEITADO ? 'Rejeitado' : 'Em Análise'}
+               <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border flex items-center gap-1 ${sol.status === StatusSolicitacao.PENDENTE ? 'bg-orange-50 text-orange-700 border-orange-100' : sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : sol.status === StatusSolicitacao.REJEITADO ? 'bg-red-50 text-red-700 border-red-100' : sol.status === StatusSolicitacao.FATURADO ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-100' }`}>
+                  {sol.status === StatusSolicitacao.FATURADO ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                  {sol.status === StatusSolicitacao.PENDENTE ? 'Triagem' : sol.status === StatusSolicitacao.APROVADO_PARA_FATURAMENTO ? 'Pronto' : sol.status === StatusSolicitacao.REJEITADO ? 'Rejeitado' : sol.status === StatusSolicitacao.FATURADO ? 'Faturado' : 'Em Análise'}
                </div>
              </div>
              <div className="p-5 flex-1 space-y-4">
@@ -546,7 +549,21 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                )}
                <div className="space-y-2 pt-2 border-t border-slate-50"><div className="flex items-center text-xs text-slate-500"><UserIcon size={12} className="mr-2 text-slate-400" /> Solicitado por: <span className="font-medium text-slate-700 ml-1">{sol.criado_por}</span></div><div className="flex items-center text-xs text-slate-500"><CalendarDays size={12} className="mr-2 text-slate-400" /> Data: <span className="font-medium text-slate-700 ml-1">{new Date(sol.data_solicitacao).toLocaleDateString()}</span></div></div>
              </div>
-             
+ 
+             {activeTab === 'history' && sol.itens_atendidos && sol.itens_atendidos.length > 0 && (
+               <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <p className="text-[10px] font-bold text-blue-800 uppercase mb-2 flex items-center gap-1"><CheckCircle2 size={10} /> Itens Faturados</p>
+                  <div className="space-y-1">
+                     {sol.itens_atendidos.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-xs text-blue-700">
+                           <span>{item.nome_produto}</span>
+                           <span className="font-bold">{item.volume.toLocaleString('pt-BR')} {item.unidade}</span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+             )}
+
              {/* ÁREA DE AÇÕES */}
              <div className="p-4 bg-slate-50 border-t border-slate-100">
                {user.role === Role.GERENTE ? (
@@ -591,6 +608,12 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                {activeTab === 'triage' && sol.status === StatusSolicitacao.EM_ANALISE && (
                    <div className="w-full px-4 py-2 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg border border-slate-200 text-center flex items-center justify-center gap-2">
                        <Clock size={14} /> Aguardando Setores...
+                   </div>
+               )}
+
+               {activeTab === 'history' && (
+                   <div className="w-full px-4 py-2 text-xs font-bold text-blue-600 bg-blue-100 rounded-lg border border-blue-200 text-center flex items-center justify-center gap-2">
+                       <CheckCircle2 size={14} /> Pedido Faturado
                    </div>
                )}
 

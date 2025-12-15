@@ -6,7 +6,7 @@ import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
-  const [activeTab, setActiveTab] = useState<'pending' | 'rejected'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'rejected' | 'history'>('pending');
   
   // States for Rejection Modal
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -96,13 +96,15 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
   };
 
   // Lógica Paralela: Mostra tudo que está em análise e que EU ainda não aprovei.
-  const pendingList = solicitacoes.filter(s => 
-    (s.status === StatusSolicitacao.EM_ANALISE) 
+  const pendingList = solicitacoes.filter(s =>
+    (s.status === StatusSolicitacao.EM_ANALISE)
     && !s.aprovacao_credito
   );
-  
+
   const rejectedList = solicitacoes.filter(s => s.status === StatusSolicitacao.REJEITADO);
-  const displayList = activeTab === 'pending' ? pendingList : rejectedList;
+  const historyList = solicitacoes.filter(s => s.status === StatusSolicitacao.FATURADO);
+
+  const displayList = activeTab === 'pending' ? pendingList : activeTab === 'rejected' ? rejectedList : historyList;
 
   const filteredList = displayList.filter(s => 
     s.nome_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -143,6 +145,7 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
             <button onClick={() => setActiveTab('pending')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'pending' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Aguardando ({pendingList.length})</button>
             <button onClick={() => setActiveTab('rejected')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'rejected' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Bloqueados ({rejectedList.length})</button>
+            <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>Histórico ({historyList.length})</button>
          </div>
        </div>
 
@@ -256,6 +259,21 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                )}
                <div className="space-y-2 pt-2 border-t border-slate-50"><div className="flex items-center text-xs text-slate-500"><CalendarDays size={12} className="mr-2 text-slate-400" /> Data: <span className="font-medium text-slate-700 ml-1">{new Date(sol.data_solicitacao).toLocaleDateString()}</span></div></div>
              </div>
+
+             {activeTab === 'history' && sol.itens_atendidos && sol.itens_atendidos.length > 0 && (
+               <div className="p-5 bg-blue-50 border-t border-slate-100">
+                  <p className="text-[10px] font-bold text-blue-800 uppercase mb-2 flex items-center gap-1"><CheckCircle2 size={10} /> Itens Faturados</p>
+                  <div className="space-y-1">
+                     {sol.itens_atendidos.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-xs text-blue-700">
+                           <span>{item.nome_produto}</span>
+                           <span className="font-bold">{item.volume.toLocaleString('pt-BR')} {item.unidade}</span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+             )}
+
              {activeTab === 'pending' && (
                <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
                  <button onClick={() => openRejectModal(sol.id)} className="flex-1 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"><XCircle size={14} /> Bloquear</button>
@@ -269,6 +287,11 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                   ) : (
                     <span className="text-xs text-slate-400 font-medium flex items-center gap-1"><Eye size={12} /> Somente leitura (Bloqueio Externo)</span>
                   )}
+                </div>
+             )}
+             {activeTab === 'history' && (
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
+                  <span className="text-xs font-bold text-blue-600 bg-blue-100 px-4 py-2 rounded-lg border border-blue-200 flex items-center gap-2"><CheckCircle2 size={14} /> Pedido Faturado</span>
                 </div>
              )}
              <div className="p-2 px-4">
