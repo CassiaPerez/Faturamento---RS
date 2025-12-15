@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare, Calendar, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare, Calendar, Info, Package } from 'lucide-react';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
@@ -260,17 +260,35 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                <div className="space-y-2 pt-2 border-t border-slate-50"><div className="flex items-center text-xs text-slate-500"><CalendarDays size={12} className="mr-2 text-slate-400" /> Data: <span className="font-medium text-slate-700 ml-1">{new Date(sol.data_solicitacao).toLocaleDateString()}</span></div></div>
              </div>
 
-             {activeTab === 'history' && sol.itens_atendidos && sol.itens_atendidos.length > 0 && (
-               <div className="p-5 bg-blue-50 border-t border-slate-100">
-                  <p className="text-[10px] font-bold text-blue-800 uppercase mb-2 flex items-center gap-1"><CheckCircle2 size={10} /> Itens Faturados</p>
-                  <div className="space-y-1">
-                     {sol.itens_atendidos.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs text-blue-700">
-                           <span>{item.nome_produto}</span>
-                           <span className="font-bold">{item.volume.toLocaleString('pt-BR')} {item.unidade}</span>
+             {activeTab === 'history' && (
+               <div className="p-5 space-y-3 bg-blue-50 border-t border-slate-100">
+                  {sol.data_faturamento && (
+                     <div className="flex items-center gap-2 text-xs text-slate-600">
+                        <Calendar size={12} className="text-blue-500" />
+                        <span>Faturado em: <span className="font-bold">{new Date(sol.data_faturamento).toLocaleString('pt-BR')}</span></span>
+                     </div>
+                  )}
+
+                  {sol.itens_atendidos && sol.itens_atendidos.length > 0 && (
+                     <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                        <p className="text-[10px] font-bold text-blue-800 uppercase mb-2 flex items-center gap-1"><Package size={10} /> Itens Faturados</p>
+                        <div className="space-y-1">
+                           {sol.itens_atendidos.map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-xs text-blue-700">
+                                 <span>{item.nome_produto}</span>
+                                 <span className="font-bold">{item.volume.toLocaleString('pt-BR')} {item.unidade}</span>
+                              </div>
+                           ))}
                         </div>
-                     ))}
-                  </div>
+                     </div>
+                  )}
+
+                  {sol.obs_emissao_nf && (
+                     <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+                        <p className="text-[10px] font-bold text-emerald-800 uppercase mb-1 flex items-center gap-1"><MessageSquare size={10} /> Observação da Emissão</p>
+                        <p className="text-xs text-emerald-700 leading-relaxed">{sol.obs_emissao_nf}</p>
+                     </div>
+                  )}
                </div>
              )}
 

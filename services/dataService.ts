@@ -864,12 +864,12 @@ export const api = {
   },
 
   updateSolicitacaoStatus: async (
-    id: string, 
-    status: StatusSolicitacao, 
-    user: User, 
+    id: string,
+    status: StatusSolicitacao,
+    user: User,
     motivoRejeicao?: string,
     blockedByRole?: Role,
-    extraData?: { prazo?: string, obs_faturamento?: string },
+    extraData?: { prazo?: string, obs_faturamento?: string, obs_emissao_nf?: string },
     itensAtendidos?: { nome_produto: string, volume: number, unidade: string }[]
   ) => {
     const solIndex = localSolicitacoes.findIndex(s => s.id === id);
@@ -1041,6 +1041,10 @@ export const api = {
     
     // Tratamento para Faturamento Final (Atualiza estoque dos itens específicos e finaliza)
     if (status === StatusSolicitacao.FATURADO) {
+       updatedSol.data_faturamento = new Date().toISOString();
+       if (extraData?.obs_emissao_nf) {
+         updatedSol.obs_emissao_nf = extraData.obs_emissao_nf;
+       }
        const pedido = localPedidos.find(p => p.id === updatedSol.pedido_id);
        if (pedido) {
          
@@ -1108,6 +1112,8 @@ export const api = {
           obs_comercial: updatedSol.obs_comercial,
           obs_credito: updatedSol.obs_credito,
           obs_faturamento: updatedSol.obs_faturamento,
+          obs_emissao_nf: updatedSol.obs_emissao_nf,
+          data_faturamento: updatedSol.data_faturamento,
           aprovado_por: updatedSol.aprovado_por,
           prazo_pedido: updatedSol.prazo_pedido,
           itens_solicitados: updatedSol.itens_solicitados,

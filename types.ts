@@ -121,7 +121,9 @@ export interface SolicitacaoFaturamento {
   
   prazo_pedido?: string;
   obs_faturamento?: string;
-  
+  obs_emissao_nf?: string;
+  data_faturamento?: string;
+
   blocked_by?: Role;
 }
 
