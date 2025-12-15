@@ -206,7 +206,7 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
             )}
           </div>
 
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+          <div className="bg-gradient-to-br from-blue-50 to-sky-50 rounded-xl p-6 border border-blue-200">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="text-blue-600" size={24} />
               <h3 className="text-lg font-bold text-gray-800">Linha do Tempo</h3>
@@ -259,11 +259,11 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
 
               {(solicitacao.aprovacao_comercial || solicitacao.aprovacao_credito) && (
                 <div className="relative pl-10">
-                  <div className="absolute left-0 top-1 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                  <div className="absolute left-0 top-1 w-8 h-8 bg-sky-500 rounded-full flex items-center justify-center border-4 border-white shadow">
                     <CheckCircle2 size={16} className="text-white" />
                   </div>
                   <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-                    <span className="text-xs font-bold text-indigo-700 uppercase block mb-2">Aprovações</span>
+                    <span className="text-xs font-bold text-sky-700 uppercase block mb-2">Aprovações</span>
                     <div className="space-y-2">
                       {solicitacao.aprovacao_comercial && (
                         <div className="flex items-center gap-2">
@@ -284,9 +284,9 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
                         </div>
                       )}
                       {solicitacao.obs_credito && (
-                        <div className="bg-indigo-50 p-2 rounded border border-indigo-200">
-                          <p className="text-xs font-semibold text-indigo-800">Obs. Crédito:</p>
-                          <p className="text-xs text-indigo-700">{solicitacao.obs_credito}</p>
+                        <div className="bg-cyan-50 p-2 rounded border border-cyan-200">
+                          <p className="text-xs font-semibold text-cyan-800">Obs. Crédito:</p>
+                          <p className="text-xs text-cyan-700">{solicitacao.obs_credito}</p>
                         </div>
                       )}
                     </div>
