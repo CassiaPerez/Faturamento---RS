@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, Pedido, Role, SolicitacaoFaturamento, StatusSolicitacao, StatusPedido } from '../types';
-import { TrendingUp, Scale, Package, ChevronRight, AlertCircle, FileCheck, CheckCircle2, CalendarDays, History, Clock, Ban } from 'lucide-react';
+import { TrendingUp, Scale, Package, ChevronRight, AlertCircle, FileCheck, CheckCircle2, CalendarDays, History, Clock, Ban, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -42,8 +42,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
   // --- RENDERIZAÇÃO PARA BACKOFFICE (Histórico de Faturamento) ---
   if (isBackOffice) {
-    const totalFaturadoVolume = historicoFaturado.reduce((acc, curr) => acc + curr.volume_solicitado, 0);
     const countNotas = historicoFaturado.length;
+    const notasRecentes = historicoFaturado.filter(h => {
+      const dataFat = new Date(h.data_faturamento || h.data_solicitacao);
+      const diasAtras = (Date.now() - dataFat.getTime()) / (1000 * 60 * 60 * 24);
+      return diasAtras <= 30;
+    }).length;
 
     return (
       <div className="space-y-8 animate-fade-in pb-10">
@@ -74,19 +78,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Scale size={64} className="text-blue-600" />
+                <Calendar size={64} className="text-blue-600" />
               </div>
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600">
-                  <Scale size={24} />
+                  <Calendar size={24} />
                 </div>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Volume Faturado</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Notas do Mês</p>
               </div>
               <h3 className="text-4xl font-extrabold text-slate-900 mt-2">
-                {totalFaturadoVolume.toLocaleString('pt-BR')} <span className="text-xl text-slate-400 font-semibold">Ton/Un</span>
+                {notasRecentes}
               </h3>
               <div className="mt-4 text-xs font-bold text-slate-400 uppercase">
-                 Acumulado Geral
+                 Últimos 30 dias
               </div>
            </div>
         </div>
@@ -150,10 +154,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
   // --- RENDERIZAÇÃO PADRÃO (GERENTE, ADMIN, VENDEDOR) ---
 
-  const totalVolume = pedidos.reduce((acc, curr) => acc + curr.volume_total, 0);
   const totalPedidos = pedidos.length;
   const pedidosAtivos = pedidos.filter(p => p.status !== StatusPedido.FINALIZADO);
   const pedidosFinalizados = pedidos.filter(p => p.status === StatusPedido.FINALIZADO);
+  const pedidosPendentes = pedidos.filter(p => p.status === StatusPedido.PENDENTE);
+  const pedidosEmProcesso = pedidos.filter(p => p.status === StatusPedido.AGUARDANDO_EMISSAO || p.status === StatusPedido.PARCIALMENTE_FATURADO);
 
   // Recent orders
   const recentOrders = [...pedidos]
@@ -216,21 +221,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
               </div>
             </div>
 
-            {/* Volume Card */}
+            {/* Total Pedidos Card */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Scale size={64} className="text-indigo-600" />
+                <FileCheck size={64} className="text-indigo-600" />
               </div>
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
-                  <Scale size={24} />
+                  <FileCheck size={24} />
                 </div>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Volume Total</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Total de Pedidos</p>
               </div>
-              <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{totalVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span className="text-xl text-slate-400 font-semibold">Vol/Qtd</span></h3>
-              <div className="mt-4 flex items-center text-sm text-emerald-600 font-bold">
-                <TrendingUp size={16} className="mr-1" />
-                <span>+12%</span> <span className="text-slate-400 font-medium ml-1">vs mês anterior</span>
+              <h3 className="text-4xl font-extrabold text-slate-900 mt-2">{totalPedidos}</h3>
+              <div className="mt-4 flex items-center text-sm text-slate-500 font-medium">
+                <span className="bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded text-xs mr-2 font-bold">{pedidosPendentes.length} pendentes</span>
+                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">{pedidosEmProcesso.length} em processo</span>
               </div>
             </div>
           </div>
