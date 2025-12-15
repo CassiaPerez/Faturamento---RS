@@ -664,11 +664,22 @@ export const api = {
   },
 
   getPedidos: async (user: User): Promise<Pedido[]> => {
-    // Carrega localmente e retorna. O DB é usado apenas para sync.
-    // Garantir que localPedidos tenham a estrutura correta (migração on-the-fly se necessário)
+    try {
+      const { data, error } = await supabase.from('pedidos').select('*').order('updated_at', { ascending: false });
+      if (!error && data && data.length > 0) {
+        localPedidos = data.map(p => ({
+          ...p,
+          itens: p.itens || [],
+          data_criacao: p.data_criacao || p.created_at
+        })) as Pedido[];
+        saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
+      }
+    } catch (e) {
+      console.warn("Usando cache local de pedidos", e);
+    }
+
     const safePedidos = localPedidos.map(p => {
-        if (!p.itens) {
-            // Migração: Se não tiver itens, cria baseado no cabeçalho
+        if (!p.itens || p.itens.length === 0) {
             return {
                 ...p,
                 itens: [{
@@ -685,8 +696,7 @@ export const api = {
         }
         return p;
     });
-    
-    // Atualiza cache se houve migração
+
     if (JSON.stringify(safePedidos) !== JSON.stringify(localPedidos)) {
         localPedidos = safePedidos;
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
@@ -726,9 +736,24 @@ export const api = {
   },
 
   getSolicitacoes: async (user: User): Promise<SolicitacaoFaturamento[]> => {
-    // Retorna local. Sync com DB é feito em background se necessário.
-    const solicitacoes = user.role === Role.VENDEDOR 
-        ? localSolicitacoes.filter(s => s.criado_por === user.name) 
+    try {
+      const { data, error } = await supabase.from('solicitacoes').select('*').order('created_at', { ascending: false });
+      if (!error && data) {
+        localSolicitacoes = data.map(s => ({
+          ...s,
+          id: String(s.id),
+          data_solicitacao: s.data_solicitacao || s.created_at,
+          itens_solicitados: s.itens_solicitados || [],
+          itens_atendidos: s.itens_atendidos || undefined
+        })) as SolicitacaoFaturamento[];
+        saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
+      }
+    } catch (e) {
+      console.warn("Usando cache local de solicitacoes", e);
+    }
+
+    const solicitacoes = user.role === Role.VENDEDOR
+        ? localSolicitacoes.filter(s => s.criado_por === user.name)
         : localSolicitacoes;
     return solicitacoes;
   },
@@ -793,19 +818,43 @@ export const api = {
       obs_vendedor: obsVendedor || undefined
     };
 
+    try {
+      const payload = {
+        pedido_id: novaSolicitacao.pedido_id,
+        numero_pedido: novaSolicitacao.numero_pedido,
+        nome_cliente: novaSolicitacao.nome_cliente,
+        nome_produto: novaSolicitacao.nome_produto,
+        unidade: novaSolicitacao.unidade,
+        volume_solicitado: novaSolicitacao.volume_solicitado,
+        valor_solicitado: novaSolicitacao.valor_solicitado,
+        itens_solicitados: novaSolicitacao.itens_solicitados,
+        status: novaSolicitacao.status,
+        criado_por: novaSolicitacao.criado_por,
+        data_solicitacao: novaSolicitacao.data_solicitacao,
+        obs_vendedor: novaSolicitacao.obs_vendedor
+      };
+
+      const { data, error } = await supabase.from('solicitacoes').insert(payload).select().single();
+      if (!error && data) {
+        novaSolicitacao.id = String(data.id);
+      }
+    } catch (e) {
+      console.warn("Erro ao salvar no Supabase, usando modo offline", e);
+    }
+
     localSolicitacoes.push(novaSolicitacao);
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
-    saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos); // Salva pedido atualizado
+    saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
     try {
-      const payload = { ...novaSolicitacao };
-      delete (payload as any).id; // DB gera ID
-      delete (payload as any).itens_solicitados; // Remove complex object if DB schema is strict text
-      
-      // Tenta salvar campos básicos no Supabase (se schema permitir JSON, poderíamos mandar itens_solicitados)
-      await supabase.from('solicitacoes').insert(payload);
+      const pedidoPayload = {
+        volume_restante: pedido.volume_restante,
+        itens: pedido.itens,
+        updated_at: new Date().toISOString()
+      };
+      await supabase.from('pedidos').update(pedidoPayload).eq('id', pedido.id);
     } catch (e) {
-      console.warn("Offline createSolicitacao");
+      console.warn("Erro ao atualizar pedido no Supabase", e);
     }
 
     const detalhesLog = `Itens: ${resumoProdutos}${obsVendedor ? ` | Obs: ${obsVendedor}` : ''}`;
@@ -1048,15 +1097,39 @@ export const api = {
     saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
     try {
-        const payload = { ...updatedSol };
-        delete (payload as any).itens_solicitados; 
-        delete (payload as any).itens_atendidos; // não envia complexo se DB n suportar
-        delete (payload as any).nome_produto; 
-        delete (payload as any).nome_cliente;
-        delete (payload as any).numero_pedido;
-        delete (payload as any).unidade;
+        const payload = {
+          status: updatedSol.status,
+          motivo_rejeicao: updatedSol.motivo_rejeicao,
+          blocked_by: updatedSol.blocked_by,
+          aprovacao_comercial: updatedSol.aprovacao_comercial,
+          aprovacao_credito: updatedSol.aprovacao_credito,
+          obs_comercial: updatedSol.obs_comercial,
+          obs_credito: updatedSol.obs_credito,
+          obs_faturamento: updatedSol.obs_faturamento,
+          aprovado_por: updatedSol.aprovado_por,
+          prazo_pedido: updatedSol.prazo_pedido,
+          itens_solicitados: updatedSol.itens_solicitados,
+          itens_atendidos: updatedSol.itens_atendidos,
+          status_pedido: updatedSol.status_pedido,
+          updated_at: new Date().toISOString()
+        };
         await supabase.from('solicitacoes').update(payload).eq('id', id);
-    } catch(e) {}
+
+        const pedido = localPedidos.find(p => p.id === updatedSol.pedido_id);
+        if (pedido) {
+          const pedidoPayload = {
+            volume_restante: pedido.volume_restante,
+            volume_faturado: pedido.volume_faturado,
+            valor_faturado: pedido.valor_faturado,
+            status: pedido.status,
+            itens: pedido.itens,
+            updated_at: new Date().toISOString()
+          };
+          await supabase.from('pedidos').update(pedidoPayload).eq('id', pedido.id);
+        }
+    } catch(e) {
+      console.warn("Erro ao atualizar no Supabase", e);
+    }
 
     const acaoLabel = status === StatusSolicitacao.EM_ANALISE ? 'Enviado para Análise' :
                       status === StatusSolicitacao.FATURADO ? 'Nota Fiscal Emitida' :
@@ -1185,11 +1258,27 @@ export const api = {
         }
         
         try {
-           const rejPayload = { ...novaRejeitada };
-           delete (rejPayload as any).id;
-           delete (rejPayload as any).itens_solicitados; 
+           const rejPayload = {
+              pedido_id: novaRejeitada.pedido_id,
+              numero_pedido: novaRejeitada.numero_pedido,
+              nome_cliente: novaRejeitada.nome_cliente,
+              nome_produto: novaRejeitada.nome_produto,
+              unidade: novaRejeitada.unidade,
+              volume_solicitado: novaRejeitada.volume_solicitado,
+              valor_solicitado: novaRejeitada.valor_solicitado,
+              itens_solicitados: novaRejeitada.itens_solicitados,
+              status: novaRejeitada.status,
+              criado_por: novaRejeitada.criado_por,
+              data_solicitacao: novaRejeitada.data_solicitacao,
+              motivo_rejeicao: novaRejeitada.motivo_rejeicao,
+              blocked_by: novaRejeitada.blocked_by,
+              aprovacao_comercial: novaRejeitada.aprovacao_comercial,
+              aprovacao_credito: novaRejeitada.aprovacao_credito
+           };
            await supabase.from('solicitacoes').insert(rejPayload);
-        } catch(e) {}
+        } catch(e) {
+          console.warn("Erro ao inserir solicitação rejeitada no Supabase", e);
+        }
 
         // 2. Atualizar a solicitação ATUAL apenas com os aprovados
         const aprovadosItems: ItemSolicitado[] = itensAprovados.map(i => ({
@@ -1227,16 +1316,22 @@ export const api = {
     }
     
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
-    try { 
-        const payload = { ...updatedSol };
-        // Limpa campos complexos antes de enviar update
-        delete (payload as any).itens_solicitados;
-        delete (payload as any).nome_produto; 
-        delete (payload as any).nome_cliente;
-        delete (payload as any).numero_pedido;
-        delete (payload as any).unidade;
-        await supabase.from('solicitacoes').update(payload).eq('id', id); 
-    } catch(e) {}
+    try {
+        const payload = {
+          status: updatedSol.status,
+          aprovacao_comercial: updatedSol.aprovacao_comercial,
+          aprovacao_credito: updatedSol.aprovacao_credito,
+          obs_comercial: updatedSol.obs_comercial,
+          obs_credito: updatedSol.obs_credito,
+          itens_solicitados: updatedSol.itens_solicitados,
+          volume_solicitado: updatedSol.volume_solicitado,
+          valor_solicitado: updatedSol.valor_solicitado,
+          updated_at: new Date().toISOString()
+        };
+        await supabase.from('solicitacoes').update(payload).eq('id', id);
+    } catch(e) {
+      console.warn("Erro ao atualizar solicitação no Supabase", e);
+    }
   },
 
   unblockSolicitacao: async (id: string, user: User) => {
@@ -1349,10 +1444,52 @@ export const api = {
         });
 
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
-        
+
+        try {
+          for (const pedido of novosPedidos) {
+            if (currentDeletedIds.includes(String(pedido.id))) continue;
+
+            const { data: existing } = await supabase
+              .from('pedidos')
+              .select('id')
+              .eq('id', pedido.id)
+              .maybeSingle();
+
+            const pedidoPayload = {
+              id: pedido.id,
+              numero_pedido: pedido.numero_pedido,
+              codigo_cliente: pedido.codigo_cliente,
+              nome_cliente: pedido.nome_cliente,
+              nome_produto: pedido.nome_produto,
+              unidade: pedido.unidade,
+              volume_total: pedido.volume_total,
+              volume_restante: pedido.volume_restante,
+              volume_faturado: pedido.volume_faturado,
+              valor_total: pedido.valor_total,
+              valor_faturado: pedido.valor_faturado,
+              codigo_vendedor: pedido.codigo_vendedor,
+              nome_vendedor: pedido.nome_vendedor,
+              status: pedido.status,
+              setor_atual: pedido.setor_atual,
+              motivo_status: pedido.motivo_status,
+              data_criacao: pedido.data_criacao,
+              itens: pedido.itens,
+              updated_at: new Date().toISOString()
+            };
+
+            if (existing) {
+              await supabase.from('pedidos').update(pedidoPayload).eq('id', pedido.id);
+            } else {
+              await supabase.from('pedidos').insert(pedidoPayload);
+            }
+          }
+        } catch (e) {
+          console.warn("Erro ao sincronizar pedidos com Supabase", e);
+        }
+
         const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: [`Add: ${added}`, `Upd: ${updated}`] };
         localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
-        
+
         return { added, updated };
     } catch (e: any) {
         const errorMsg = e.message || JSON.stringify(e);
