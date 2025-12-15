@@ -104,8 +104,9 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
 
       for (const item of originalItems) {
           const rawVal = invoiceVolumes[item.nome_produto];
-          const val = parseFloat(rawVal?.replace(',', '.') || '0');
-          if (val > 0) {
+          const volumeStr = String(rawVal || '0').trim().replace(',', '.');
+          const val = parseFloat(volumeStr);
+          if (!isNaN(val) && val > 0) {
               itensFaturados.push({
                   nome_produto: item.nome_produto,
                   volume: val,
@@ -202,11 +203,12 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
 
     // Filtra e prepara os itens que realmente vão para análise
     const itemsToSend: ItemSolicitado[] = [];
-    
+
     for (const item of analysisItems) {
         if (item.selected) {
-            const vol = parseFloat(item.volume_editado.replace(',', '.'));
-            if (vol > 0) {
+            const volumeStr = String(item.volume_editado || '0').trim().replace(',', '.');
+            const vol = parseFloat(volumeStr);
+            if (!isNaN(vol) && vol > 0) {
                 itemsToSend.push({
                     nome_produto: item.nome_produto,
                     volume: vol,
