@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role, Pedido } from '../types';
-import { CheckCircle2, XCircle, TrendingUp, CalendarDays, User as UserIcon, AlertTriangle, Eye, Search, X, MessageSquarePlus, Unlock, Lock, Ban, RefreshCcw, MessageSquare, Calendar, DollarSign, Package, AlertOctagon } from 'lucide-react';
+import { CheckCircle2, XCircle, TrendingUp, CalendarDays, User as UserIcon, AlertTriangle, Eye, Search, X, MessageSquarePlus, Unlock, Lock, Ban, RefreshCcw, MessageSquare, Calendar, DollarSign, Package, AlertOctagon, Info } from 'lucide-react';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -34,6 +35,10 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
   const [unblockReason, setUnblockReason] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Modal de Detalhes
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedSolicitacao, setSelectedSolicitacao] = useState<SolicitacaoFaturamento | null>(null);
 
   useEffect(() => {
     api.getSolicitacoes(user).then(data => {
@@ -367,6 +372,14 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
                   )}
                 </div>
              )}
+             <div className="p-2 px-4">
+               <button
+                 onClick={() => { setSelectedSolicitacao(sol); setIsDetailsModalOpen(true); }}
+                 className="w-full px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors flex items-center justify-center gap-2"
+               >
+                 <Info size={14} /> Ver Detalhes Completos
+               </button>
+             </div>
            </div>
          ))}
        </div>
@@ -482,6 +495,12 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
            </div>
          </div>
        )}
+
+       <OrderDetailsModal
+         isOpen={isDetailsModalOpen}
+         onClose={() => setIsDetailsModalOpen(false)}
+         solicitacao={selectedSolicitacao}
+       />
     </div>
   );
 };

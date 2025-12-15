@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/dataService';
 import { User, Pedido, SolicitacaoFaturamento, StatusSolicitacao, Role, StatusPedido, HistoricoEvento } from '../types';
-import { 
-  Search, Filter, ChevronDown, Package, User as UserIcon, Calendar, Briefcase, X, SlidersHorizontal, History, 
-  AlertTriangle, Lock, Ban, MessageSquare, ChevronLeft, ChevronRight, CheckCircle2, Clock, Banknote, TrendingUp, FileCheck, Loader2, Hourglass, Trash2, LayoutList, ArrowRight, RefreshCcw
+import {
+  Search, Filter, ChevronDown, Package, User as UserIcon, Calendar, Briefcase, X, SlidersHorizontal, History,
+  AlertTriangle, Lock, Ban, MessageSquare, ChevronLeft, ChevronRight, CheckCircle2, Clock, Banknote, TrendingUp, FileCheck, Loader2, Hourglass, Trash2, LayoutList, ArrowRight, RefreshCcw, Info
 } from 'lucide-react';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -34,6 +35,10 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
   });
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Modal de Detalhes
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedSolicitacao, setSelectedSolicitacao] = useState<SolicitacaoFaturamento | null>(null);
 
   useEffect(() => {
     loadData();
@@ -366,12 +371,20 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                 )}
                             </div>
 
-                            <button 
-                                onClick={() => handleGoToOrder(sol.numero_pedido)}
-                                className="w-full py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
-                            >
-                                <RefreshCcw size={14} /> Acessar Pedido e Corrigir
-                            </button>
+                            <div className="space-y-2">
+                                <button
+                                    onClick={() => handleGoToOrder(sol.numero_pedido)}
+                                    className="w-full py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <RefreshCcw size={14} /> Acessar Pedido e Corrigir
+                                </button>
+                                <button
+                                    onClick={() => { setSelectedSolicitacao(sol); setIsDetailsModalOpen(true); }}
+                                    className="w-full py-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-600 font-medium text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Info size={14} /> Ver Detalhes
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -647,6 +660,13 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                                         )}
                                                     </div>
                                                 )}
+
+                                                <button
+                                                    onClick={() => { setSelectedSolicitacao(sol); setIsDetailsModalOpen(true); }}
+                                                    className="mt-3 w-full py-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-600 font-medium text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <Info size={14} /> Ver Detalhes Completos
+                                                </button>
                                         </div>
                                     ))}
                                     </div>
@@ -732,6 +752,12 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
           </div>
         </div>
       )}
+
+      <OrderDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        solicitacao={selectedSolicitacao}
+      />
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role, ItemSolicitado, Pedido } from '../types';
-import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye, Calendar, ArrowRight, Package, Calculator } from 'lucide-react';
+import { CheckCircle2, XCircle, FileCheck, Clock, CalendarDays, User as UserIcon, Send, AlertTriangle, RefreshCcw, XOctagon, Search, X, Lock, Ban, MessageSquare, Eye, Calendar, ArrowRight, Package, Calculator, Info } from 'lucide-react';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -38,6 +39,10 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const [invoiceSolId, setInvoiceSolId] = useState<string | null>(null);
   const [invoiceVolumes, setInvoiceVolumes] = useState<Record<string, string>>({});
   const [currentSolForInvoice, setCurrentSolForInvoice] = useState<SolicitacaoFaturamento | null>(null);
+
+  // Modal de Detalhes
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedSolicitacao, setSelectedSolicitacao] = useState<SolicitacaoFaturamento | null>(null);
 
   useEffect(() => {
     // Carrega solicitações e também pedidos (para ter os preços unitários)
@@ -539,6 +544,13 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                        <Clock size={14} /> Aguardando Setores...
                    </div>
                )}
+
+               <button
+                 onClick={() => { setSelectedSolicitacao(sol); setIsDetailsModalOpen(true); }}
+                 className="w-full mt-2 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors flex items-center justify-center gap-2"
+               >
+                 <Info size={14} /> Ver Detalhes Completos
+               </button>
              </div>
            </div>
          ))}
@@ -748,6 +760,12 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
            </div>
          </div>
        )}
+
+       <OrderDetailsModal
+         isOpen={isDetailsModalOpen}
+         onClose={() => setIsDetailsModalOpen(false)}
+         solicitacao={selectedSolicitacao}
+       />
     </div>
   );
 };

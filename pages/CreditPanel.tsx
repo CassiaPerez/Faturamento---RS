@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/dataService';
 import { User, SolicitacaoFaturamento, StatusSolicitacao, Role } from '../types';
-import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, Banknote, CalendarDays, AlertTriangle, Eye, Lock, Search, X, MessageSquarePlus, Unlock, Ban, RefreshCcw, MessageSquare, Calendar, Info } from 'lucide-react';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoFaturamento[]>([]);
@@ -23,6 +24,10 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
   const [unblockReason, setUnblockReason] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Modal de Detalhes
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedSolicitacao, setSelectedSolicitacao] = useState<SolicitacaoFaturamento | null>(null);
 
   useEffect(() => {
     api.getSolicitacoes(user).then(data => {
@@ -266,6 +271,14 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
                   )}
                 </div>
              )}
+             <div className="p-2 px-4">
+               <button
+                 onClick={() => { setSelectedSolicitacao(sol); setIsDetailsModalOpen(true); }}
+                 className="w-full px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors flex items-center justify-center gap-2"
+               >
+                 <Info size={14} /> Ver Detalhes Completos
+               </button>
+             </div>
            </div>
          ))}
        </div>
@@ -321,6 +334,12 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
            </div>
          </div>
        )}
+
+       <OrderDetailsModal
+         isOpen={isDetailsModalOpen}
+         onClose={() => setIsDetailsModalOpen(false)}
+         solicitacao={selectedSolicitacao}
+       />
     </div>
   );
 };
