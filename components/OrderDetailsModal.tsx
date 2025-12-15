@@ -1,6 +1,6 @@
 import React from 'react';
-import { SolicitacaoFaturamento } from '../types';
-import { X, User, FileText, Package, Calendar, DollarSign, Clock } from 'lucide-react';
+import { SolicitacaoFaturamento, StatusSolicitacao } from '../types';
+import { X, User, FileText, Package, Calendar, DollarSign, Clock, CheckCircle2, AlertTriangle, Send, FileCheck, ArrowRight } from 'lucide-react';
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
@@ -206,47 +206,131 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
             )}
           </div>
 
-          {(solicitacao.obs_vendedor || solicitacao.obs_comercial || solicitacao.obs_credito || solicitacao.obs_faturamento) && (
-            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="text-yellow-600" size={20} />
-                <h3 className="font-semibold text-gray-800">Observações</h3>
-              </div>
-              <div className="space-y-3">
-                {solicitacao.obs_vendedor && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Vendedor:</span>
-                    <p className="text-sm text-gray-600 mt-1">{solicitacao.obs_vendedor}</p>
-                  </div>
-                )}
-                {solicitacao.obs_comercial && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Comercial:</span>
-                    <p className="text-sm text-gray-600 mt-1">{solicitacao.obs_comercial}</p>
-                  </div>
-                )}
-                {solicitacao.obs_credito && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Crédito:</span>
-                    <p className="text-sm text-gray-600 mt-1">{solicitacao.obs_credito}</p>
-                  </div>
-                )}
-                {solicitacao.obs_faturamento && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Faturamento:</span>
-                    <p className="text-sm text-gray-600 mt-1">{solicitacao.obs_faturamento}</p>
-                  </div>
-                )}
-              </div>
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="text-blue-600" size={24} />
+              <h3 className="text-lg font-bold text-gray-800">Linha do Tempo</h3>
             </div>
-          )}
 
-          {solicitacao.motivo_rejeicao && (
-            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-              <h3 className="font-semibold text-red-800 mb-2">Motivo da Rejeição</h3>
-              <p className="text-sm text-red-600">{solicitacao.motivo_rejeicao}</p>
+            <div className="relative space-y-4">
+              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
+
+              <div className="relative pl-10">
+                <div className="absolute left-0 top-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                  <User size={16} className="text-white" />
+                </div>
+                <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-green-700 uppercase">Solicitação Criada</span>
+                    <span className="text-xs text-gray-500">{formatDate(solicitacao.data_solicitacao)}</span>
+                  </div>
+                  <p className="text-sm text-gray-700">Por: <span className="font-semibold">{solicitacao.criado_por}</span></p>
+                  {solicitacao.obs_vendedor && (
+                    <div className="mt-2 bg-amber-50 p-2 rounded border border-amber-200">
+                      <p className="text-xs font-semibold text-amber-800">Observação:</p>
+                      <p className="text-xs text-amber-700">{solicitacao.obs_vendedor}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {solicitacao.status !== StatusSolicitacao.PENDENTE && (
+                <div className="relative pl-10">
+                  <div className="absolute left-0 top-1 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                    <Send size={16} className="text-white" />
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-blue-700 uppercase">Enviado para Análise</span>
+                      <span className="text-xs text-gray-500">Faturamento</span>
+                    </div>
+                    {solicitacao.prazo_pedido && (
+                      <p className="text-xs text-gray-600 mt-1">Prazo: <span className="font-semibold">{solicitacao.prazo_pedido}</span></p>
+                    )}
+                    {solicitacao.obs_faturamento && (
+                      <div className="mt-2 bg-blue-50 p-2 rounded border border-blue-200">
+                        <p className="text-xs font-semibold text-blue-800">Observação Faturamento:</p>
+                        <p className="text-xs text-blue-700">{solicitacao.obs_faturamento}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(solicitacao.aprovacao_comercial || solicitacao.aprovacao_credito) && (
+                <div className="relative pl-10">
+                  <div className="absolute left-0 top-1 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                    <CheckCircle2 size={16} className="text-white" />
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                    <span className="text-xs font-bold text-indigo-700 uppercase block mb-2">Aprovações</span>
+                    <div className="space-y-2">
+                      {solicitacao.aprovacao_comercial && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={14} className="text-green-600" />
+                          <span className="text-xs text-gray-700">Comercial aprovado</span>
+                        </div>
+                      )}
+                      {solicitacao.obs_comercial && (
+                        <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                          <p className="text-xs font-semibold text-blue-800">Obs. Comercial:</p>
+                          <p className="text-xs text-blue-700">{solicitacao.obs_comercial}</p>
+                        </div>
+                      )}
+                      {solicitacao.aprovacao_credito && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={14} className="text-green-600" />
+                          <span className="text-xs text-gray-700">Crédito aprovado</span>
+                        </div>
+                      )}
+                      {solicitacao.obs_credito && (
+                        <div className="bg-indigo-50 p-2 rounded border border-indigo-200">
+                          <p className="text-xs font-semibold text-indigo-800">Obs. Crédito:</p>
+                          <p className="text-xs text-indigo-700">{solicitacao.obs_credito}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {solicitacao.status === StatusSolicitacao.FATURADO && (
+                <div className="relative pl-10">
+                  <div className="absolute left-0 top-1 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                    <FileCheck size={16} className="text-white" />
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-700 uppercase">Faturado</span>
+                      {solicitacao.data_faturamento && (
+                        <span className="text-xs text-gray-500">{formatDate(solicitacao.data_faturamento)}</span>
+                      )}
+                    </div>
+                    {solicitacao.obs_emissao_nf && (
+                      <div className="mt-2 bg-emerald-50 p-2 rounded border border-emerald-200">
+                        <p className="text-xs font-semibold text-emerald-800">Observação da Emissão:</p>
+                        <p className="text-xs text-emerald-700">{solicitacao.obs_emissao_nf}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {solicitacao.status === StatusSolicitacao.REJEITADO && solicitacao.motivo_rejeicao && (
+                <div className="relative pl-10">
+                  <div className="absolute left-0 top-1 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center border-4 border-white shadow">
+                    <AlertTriangle size={16} className="text-white" />
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                    <span className="text-xs font-bold text-red-700 uppercase block mb-2">Bloqueado</span>
+                    <div className="bg-red-50 p-2 rounded border border-red-200">
+                      <p className="text-xs text-red-700">{solicitacao.motivo_rejeicao}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             {typeof solicitacao.aprovacao_comercial === 'boolean' && (
