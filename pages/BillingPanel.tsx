@@ -148,32 +148,45 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   // --- LÓGICA DE ENVIO PARA ANÁLISE (TRIAGEM) ---
   const openSendModal = (id: string) => {
     const sol = solicitacoes.find(s => s.id === id);
-    if (!sol) return;
+    if (!sol) {
+        console.error("Solicitação não encontrada:", id);
+        return;
+    }
+
+    console.log("=== ABRINDO MODAL DE ENVIO ===");
+    console.log("Solicitação completa:", JSON.stringify(sol, null, 2));
 
     setSendId(id);
     setSendPrazo(sol.prazo_pedido || '');
     setSendObs(sol.obs_faturamento || '');
-    
+
     // Prepara lista de edição baseada nos itens solicitados
-    if (sol.itens_solicitados) {
-        setAnalysisItems(sol.itens_solicitados.map(i => ({
+    if (sol.itens_solicitados && sol.itens_solicitados.length > 0) {
+        console.log("Usando itens_solicitados:", sol.itens_solicitados);
+        const items = sol.itens_solicitados.map(i => ({
             nome_produto: i.nome_produto,
-            volume_original: i.volume,
-            volume_editado: i.volume.toString(),
-            unidade: i.unidade,
+            volume_original: i.volume || 0,
+            volume_editado: String(i.volume || 0),
+            unidade: i.unidade || 'TN',
             selected: true,
             obs: i.obs || ''
-        })));
+        }));
+        console.log("Items preparados:", items);
+        setAnalysisItems(items);
     } else {
-        // Fallback
-        setAnalysisItems([{
-            nome_produto: sol.nome_produto,
-            volume_original: sol.volume_solicitado,
-            volume_editado: sol.volume_solicitado.toString(),
-            unidade: sol.unidade,
+        // Fallback para solicitações sem estrutura de itens
+        console.log("Usando FALLBACK - sem itens_solicitados");
+        const volume = sol.volume_solicitado || 0;
+        const item = {
+            nome_produto: sol.nome_produto || 'Produto',
+            volume_original: volume,
+            volume_editado: String(volume),
+            unidade: sol.unidade || 'TN',
             selected: true,
             obs: ''
-        }]);
+        };
+        console.log("Item fallback preparado:", item);
+        setAnalysisItems([item]);
     }
 
     setIsSendModalOpen(true);
@@ -211,26 +224,49 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
         return;
     }
 
+    if (analysisItems.length === 0) {
+        alert("Erro: Nenhum item disponível para envio. Por favor, feche e abra o modal novamente.");
+        return;
+    }
+
     // Filtra e prepara os itens que realmente vão para análise
     const itemsToSend: ItemSolicitado[] = [];
 
+    console.log("=== DEBUG ENVIO ===");
+    console.log("analysisItems:", JSON.stringify(analysisItems, null, 2));
+
     for (const item of analysisItems) {
+        console.log(`Processando item: ${item.nome_produto}, selected: ${item.selected}, volume_editado: ${item.volume_editado}, volume_original: ${item.volume_original}`);
+
         if (item.selected) {
-            const volumeStr = String(item.volume_editado || '0').trim().replace(',', '.');
+            // Usa volume_original como fallback se volume_editado estiver vazio
+            const volumeValue = item.volume_editado || item.volume_original;
+            const volumeStr = String(volumeValue || '0').trim().replace(',', '.');
             const vol = parseFloat(volumeStr);
+
+            console.log(`  -> volumeValue: ${volumeValue}, volumeStr: ${volumeStr}, vol: ${vol}`);
+
             if (!isNaN(vol) && vol > 0) {
                 itemsToSend.push({
                     nome_produto: item.nome_produto,
                     volume: vol,
                     unidade: item.unidade,
-                    obs: item.obs
+                    obs: item.obs || ''
                 });
+                console.log(`  -> Item adicionado!`);
+            } else {
+                console.warn(`  -> Item ${item.nome_produto} ignorado: volume inválido (${volumeStr})`);
             }
+        } else {
+            console.log(`  -> Item não selecionado, pulando`);
         }
     }
 
+    console.log("itemsToSend final:", JSON.stringify(itemsToSend, null, 2));
+
     if (itemsToSend.length === 0) {
-        alert("Selecione pelo menos um item para enviar para análise.");
+        alert("Erro: Nenhum item válido selecionado.\n\nVerifique:\n1. Se há itens marcados\n2. Se os volumes estão preenchidos\n3. O console do navegador para mais detalhes (F12)");
+        console.error("ERRO: analysisItems completo:", analysisItems);
         return;
     }
 
