@@ -207,9 +207,14 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
     });
   }, [pedidos, globalFilter, filters]);
 
+  // Conta apenas pedidos ativos (não finalizados)
+  const pedidosAtivos = useMemo(() => {
+      return pedidos.filter(p => p.status !== StatusPedido.FINALIZADO);
+  }, [pedidos]);
+
   // Filtra solicitações rejeitadas para a aba de "Devoluções"
   const rejectedList = useMemo(() => {
-      return allSolicitacoes.filter(s => 
+      return allSolicitacoes.filter(s =>
           s.status === StatusSolicitacao.REJEITADO &&
           (globalFilter === '' || s.nome_cliente.toLowerCase().includes(globalFilter.toLowerCase()) || s.numero_pedido.includes(globalFilter))
       ).sort((a, b) => new Date(b.data_solicitacao).getTime() - new Date(a.data_solicitacao).getTime());
@@ -267,11 +272,11 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
       <div className="mb-6 space-y-4">
         {/* TABS DE NAVEGAÇÃO */}
         <div className="flex gap-4 border-b border-slate-200">
-            <button 
+            <button
                 onClick={() => setActiveTab('orders')}
                 className={`pb-3 px-2 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'orders' ? 'border-crop-600 text-crop-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
-                <Package size={18} /> Carteira Ativa ({pedidos.length})
+                <Package size={18} /> Carteira Ativa ({pedidosAtivos.length})
             </button>
             <button 
                 onClick={() => setActiveTab('rejected')}
