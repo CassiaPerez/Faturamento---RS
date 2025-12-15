@@ -206,6 +206,11 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
   const handleConfirmSend = async () => {
     if (!sendId) return;
 
+    if (!sendPrazo.trim()) {
+        alert("Por favor, preencha o prazo do pedido antes de enviar.");
+        return;
+    }
+
     // Filtra e prepara os itens que realmente vão para análise
     const itemsToSend: ItemSolicitado[] = [];
 
@@ -229,35 +234,43 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
         return;
     }
 
-    // A API agora aceita 'itensAtendidos' (neste contexto, itens revisados) para recalcular o saldo da carteira
-    // O que não estiver nesta lista voltará para a carteira (volume_restante do pedido)
-    await api.updateSolicitacaoStatus(
-        sendId, 
-        StatusSolicitacao.EM_ANALISE, 
-        user, 
-        undefined, 
-        undefined, 
-        {
-            prazo: sendPrazo,
-            obs_faturamento: sendObs
-        },
-        itemsToSend // Passa os itens revisados
-    );
+    try {
+        // A API agora aceita 'itensAtendidos' (neste contexto, itens revisados) para recalcular o saldo da carteira
+        // O que não estiver nesta lista voltará para a carteira (volume_restante do pedido)
+        await api.updateSolicitacaoStatus(
+            sendId,
+            StatusSolicitacao.EM_ANALISE,
+            user,
+            undefined,
+            undefined,
+            {
+                prazo: sendPrazo,
+                obs_faturamento: sendObs
+            },
+            itemsToSend // Passa os itens revisados
+        );
 
-    // Atualiza volume_solicitado visual localmente para refletir o novo total
-    const novoVolumeTotal = itemsToSend.reduce((acc, i) => acc + i.volume, 0);
-    const novoResumoProdutos = itemsToSend.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
+        // Atualiza volume_solicitado visual localmente para refletir o novo total
+        const novoVolumeTotal = itemsToSend.reduce((acc, i) => acc + i.volume, 0);
+        const novoResumoProdutos = itemsToSend.map(i => `${i.nome_produto}: ${i.volume} ${i.unidade}`).join(' | ');
 
-    updateLocalStatus(sendId, StatusSolicitacao.EM_ANALISE, { 
-        prazo_pedido: sendPrazo, 
-        obs_faturamento: sendObs,
-        itens_solicitados: itemsToSend,
-        volume_solicitado: novoVolumeTotal,
-        nome_produto: novoResumoProdutos
-    });
+        updateLocalStatus(sendId, StatusSolicitacao.EM_ANALISE, {
+            prazo_pedido: sendPrazo,
+            obs_faturamento: sendObs,
+            itens_solicitados: itemsToSend,
+            volume_solicitado: novoVolumeTotal,
+            nome_produto: novoResumoProdutos
+        });
 
-    setIsSendModalOpen(false);
-    setSendId(null);
+        setIsSendModalOpen(false);
+        setSendId(null);
+        setSendPrazo('');
+        setSendObs('');
+        alert("Solicitação enviada com sucesso para análise dos setores de Crédito e Comercial!");
+    } catch (error: any) {
+        console.error("Erro ao enviar solicitação:", error);
+        alert("Erro ao enviar solicitação: " + (error.message || "Erro desconhecido"));
+    }
   };
   
   const openUnblockModal = (id: string) => {
@@ -639,8 +652,21 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                </div>
 
                <div className="space-y-1.5 border-t border-slate-100 pt-4">
-                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><Calendar size={12} /> Prazo do Pedido</label>
-                   <input type="text" placeholder="Ex: 30 dias, 30/60/90..." value={sendPrazo} onChange={e => setSendPrazo(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm font-medium" />
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                       <Calendar size={12} /> Prazo do Pedido <span className="text-red-500">*</span>
+                   </label>
+                   <input
+                       type="text"
+                       placeholder="Ex: 30 dias, 30/60/90..."
+                       value={sendPrazo}
+                       onChange={e => setSendPrazo(e.target.value)}
+                       className={`w-full p-3 border rounded-xl focus:ring-2 focus:border-transparent outline-none text-sm font-medium ${sendPrazo.trim() ? 'bg-slate-50 border-slate-200 focus:ring-blue-500' : 'bg-red-50 border-red-300 focus:ring-red-500'}`}
+                   />
+                   {!sendPrazo.trim() && (
+                       <p className="text-xs text-red-600 flex items-center gap-1">
+                           <AlertTriangle size={12} /> Campo obrigatório para enviar ao Crédito e Comercial
+                       </p>
+                   )}
                </div>
                
                <div className="space-y-1.5">
@@ -649,11 +675,18 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                </div>
              </div>
 
-             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
-               <button onClick={() => setIsSendModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
-               <button onClick={handleConfirmSend} disabled={!sendPrazo.trim()} className="flex-[2] px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2">
-                   <Send size={16} /> Confirmar Envio
-               </button>
+             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
+               <div className="flex gap-3">
+                 <button onClick={() => setIsSendModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm">Cancelar</button>
+                 <button onClick={handleConfirmSend} disabled={!sendPrazo.trim()} className="flex-[2] px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2">
+                     <Send size={16} /> Enviar p/ Crédito & Comercial
+                 </button>
+               </div>
+               {!sendPrazo.trim() && (
+                   <p className="text-xs text-amber-600 text-center mt-2 flex items-center justify-center gap-1">
+                       <Clock size={12} /> Preencha o prazo para habilitar o envio
+                   </p>
+               )}
              </div>
            </div>
          </div>
