@@ -368,7 +368,10 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
              <div className="p-5 border-b border-slate-100 flex justify-between items-start bg-gradient-to-b from-slate-50 to-white">
                <div>
                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span>
-                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>{sol.nome_cliente}</h4>
+                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={`${sol.codigo_cliente ? `[${sol.codigo_cliente}] ` : ''}${sol.nome_cliente}`}>
+                   {sol.codigo_cliente && <span className="text-crop-600 mr-1">[{sol.codigo_cliente}]</span>}
+                   {sol.nome_cliente}
+                 </h4>
                  {sol.status === StatusSolicitacao.REJEITADO && (
                     <div className="mt-2 flex items-center gap-1.5">
                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bloqueio:</span>
@@ -597,12 +600,12 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                                <div className="grid grid-cols-3 gap-3 ml-8 animate-fade-in">
                                    <div className="col-span-1">
                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Volume</label>
-                                       <input 
-                                          type="number" 
+                                       <input
+                                          type="text"
+                                          inputMode="decimal"
                                           value={item.volume_editado}
                                           onChange={e => updateAnalysisItemVolume(idx, e.target.value)}
                                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-1 focus:ring-blue-500 outline-none"
-                                          max={item.volume_original}
                                        />
                                    </div>
                                    <div className="col-span-2">
@@ -688,18 +691,13 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                                        <div className="flex flex-col">
                                            <label className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Qtd. a Faturar</label>
                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="number"
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
                                                     value={invoiceVolumes[item.nome_produto] || ''}
-                                                    onChange={e => {
-                                                        const val = parseFloat(e.target.value);
-                                                        if (val <= item.volume) {
-                                                            setInvoiceVolumes(prev => ({...prev, [item.nome_produto]: e.target.value}));
-                                                        }
-                                                    }}
-                                                    max={item.volume}
-                                                    min={0}
+                                                    onChange={e => setInvoiceVolumes(prev => ({...prev, [item.nome_produto]: e.target.value}))}
+                                                    placeholder={`Max: ${item.volume}`}
                                                 />
                                                 <span className="text-xs font-bold text-slate-500">{item.unidade}</span>
                                            </div>
@@ -725,18 +723,13 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                            </div>
                            <div className="relative">
                                <span className="absolute left-3 top-2.5 text-xs font-bold text-emerald-600">Faturar:</span>
-                               <input 
-                                  type="number"
+                               <input
+                                  type="text"
+                                  inputMode="decimal"
                                   className="w-full pl-16 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
                                   value={invoiceVolumes[currentSolForInvoice.nome_produto] || ''}
-                                  onChange={e => {
-                                      const val = parseFloat(e.target.value);
-                                      if (val <= currentSolForInvoice.volume_solicitado) {
-                                          setInvoiceVolumes(prev => ({...prev, [currentSolForInvoice.nome_produto]: e.target.value}));
-                                      }
-                                  }}
-                                  max={currentSolForInvoice.volume_solicitado}
-                                  min={0}
+                                  onChange={e => setInvoiceVolumes(prev => ({...prev, [currentSolForInvoice.nome_produto]: e.target.value}))}
+                                  placeholder={`Max: ${currentSolForInvoice.volume_solicitado}`}
                                />
                            </div>
                        </div>

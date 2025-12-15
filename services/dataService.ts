@@ -801,8 +801,9 @@ export const api = {
       id: `req-${Date.now()}`,
       pedido_id: pedidoId,
       numero_pedido: pedido.numero_pedido,
+      codigo_cliente: pedido.codigo_cliente,
       nome_cliente: pedido.nome_cliente,
-      
+
       // Campos de compatibilidade
       nome_produto: resumoProdutos,
       unidade: itensSolicitados[0]?.unidade || 'TN', 
@@ -822,6 +823,7 @@ export const api = {
       const payload = {
         pedido_id: novaSolicitacao.pedido_id,
         numero_pedido: novaSolicitacao.numero_pedido,
+        codigo_cliente: novaSolicitacao.codigo_cliente,
         nome_cliente: novaSolicitacao.nome_cliente,
         nome_produto: novaSolicitacao.nome_produto,
         unidade: novaSolicitacao.unidade,

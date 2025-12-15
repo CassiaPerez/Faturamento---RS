@@ -93,6 +93,7 @@ export interface SolicitacaoFaturamento {
   id: string;
   pedido_id: string;
   numero_pedido: string;
+  codigo_cliente?: string;
   nome_cliente: string;
   
   // Campo legado para compatibilidade visual (contém resumo: "Prod A: 10 | Prod B: 20")
