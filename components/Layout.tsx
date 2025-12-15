@@ -24,13 +24,11 @@ import {
 interface LayoutProps {
   children: React.ReactNode;
   currentUser: User;
-  onSwitchUser: (userId: string) => void;
   currentView: string;
   onNavigate: (view: string) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, currentView, onNavigate }) => {
-  const [usersList, setUsersList] = useState<User[]>([]);
+const Layout: React.FC<LayoutProps> = ({ children, currentUser, currentView, onNavigate }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Sync Widget State
@@ -38,12 +36,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    // Fetch users for the switcher (keeps dropdown in sync)
-    api.getUsers().then(setUsersList);
     updateSyncTime();
-    
+
     // Polling para atualizar o horário da última sync visualmente caso ocorra em background
-    const interval = setInterval(updateSyncTime, 60000); 
+    const interval = setInterval(updateSyncTime, 60000);
     return () => clearInterval(interval);
   }, [currentView]);
 
@@ -153,23 +149,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onSwitchUser, cu
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
               <p className="text-[10px] text-slate-400 truncate capitalize font-medium">{currentUser.role.toLowerCase()}</p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[9px] text-slate-500 font-bold uppercase px-1 tracking-wider">Simular Acesso</label>
-            <div className="relative group">
-              <UserIcon size={14} className="absolute left-2.5 top-2.5 text-slate-500 group-hover:text-crop-400 transition-colors" />
-              <select 
-                value={currentUser.id}
-                onChange={(e) => onSwitchUser(e.target.value)}
-                className="w-full bg-slate-950 text-slate-300 text-xs rounded-lg pl-8 pr-4 py-2 border border-slate-700 focus:outline-none focus:border-crop-500 focus:ring-1 focus:ring-crop-500 appearance-none cursor-pointer hover:border-slate-600 transition-colors"
-              >
-                {usersList.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-2.5 text-slate-500 pointer-events-none" />
             </div>
           </div>
         </div>

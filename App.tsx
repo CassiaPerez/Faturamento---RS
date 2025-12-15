@@ -42,14 +42,6 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
   };
 
-  const handleSwitchUser = (userId: string) => {
-    // Allows switching for testing purposes inside the app
-    api.getUsers().then(users => {
-      const user = users.find(u => u.id === userId);
-      if (user) setCurrentUser(user);
-    });
-  };
-
   const renderContent = () => {
     if (!currentUser) return null;
 
@@ -81,9 +73,8 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-900 font-sans">
-      <Layout 
-        currentUser={currentUser} 
-        onSwitchUser={handleSwitchUser}
+      <Layout
+        currentUser={currentUser}
         currentView={currentView}
         onNavigate={setCurrentView}
       >
