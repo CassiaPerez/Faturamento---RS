@@ -407,14 +407,14 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
             paginatedPedidos.length > 0 ? (
             paginatedPedidos.map(p => {
                 const valorRestante = p.itens.reduce((acc, i) => acc + (i.volume_restante * i.valor_unitario), 0);
-                
-                // Texto do Produto (Card Fechado)
+
+                // Texto do Produto com Embalagem (Card Fechado)
                 let productDisplay = "Mix de Produtos";
                 if (p.itens.length === 1) {
-                    productDisplay = p.itens[0].nome_produto;
+                    productDisplay = `${p.itens[0].nome_produto} (${p.itens[0].unidade})`;
                 } else if (p.itens.length > 1) {
-                    // Mostra os 2 primeiros nomes
-                    productDisplay = `${p.itens[0].nome_produto}, ${p.itens[1].nome_produto}${p.itens.length > 2 ? ` +${p.itens.length - 2}` : ''}`;
+                    // Mostra os 2 primeiros nomes com embalagem
+                    productDisplay = `${p.itens[0].nome_produto} (${p.itens[0].unidade}), ${p.itens[1].nome_produto} (${p.itens[1].unidade})${p.itens.length > 2 ? ` +${p.itens.length - 2}` : ''}`;
                 }
 
                 return (
@@ -445,9 +445,9 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                         
                         <div className="flex justify-between border-t border-slate-200/50 pt-1">
                             <div className="flex flex-col">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase">Restante Total</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase">Volume a Faturar</span>
                                 <span className={`text-sm font-bold ${p.volume_restante > 0 ? 'text-crop-600' : 'text-slate-400'}`}>
-                                    {p.volume_restante.toLocaleString('pt-BR')} <span className="text-xs">{p.itens.length > 1 ? 'Vol' : p.unidade}</span>
+                                    {p.volume_restante.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                             </div>
                             <div className="flex flex-col text-right">
@@ -459,8 +459,8 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
 
                     <div className="text-right min-w-[150px]">
                         <p className="text-xs font-bold text-slate-400 uppercase mb-0.5">Saldo Restante</p>
-                        <p className="text-xl font-extrabold text-slate-900">R$ {valorRestante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-slate-400 mt-1">Total Pedido: R$ {p.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-xl font-extrabold text-slate-900">R$ {valorRestante.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Total Pedido: R$ {p.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                     
                     {/* Botões de Ação */}
@@ -499,23 +499,30 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-slate-500 uppercase bg-slate-50">
                                         <tr>
-                                            <th className="px-4 py-3 font-semibold">Produto</th>
-                                            <th className="px-4 py-3 font-semibold text-right">Unitário</th>
-                                            <th className="px-4 py-3 font-semibold text-right">Total</th>
+                                            <th className="px-4 py-3 font-semibold">Produto / Embalagem</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Valor Unit.</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Volume Total</th>
                                             <th className="px-4 py-3 font-semibold text-right">Faturado</th>
-                                            <th className="px-4 py-3 font-semibold text-right text-crop-600">Restante</th>
+                                            <th className="px-4 py-3 font-semibold text-right text-crop-600">A Faturar</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Valor Restante</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {p.itens.map(item => (
+                                        {p.itens.map(item => {
+                                            const valorRestanteItem = item.volume_restante * item.valor_unitario;
+                                            return (
                                             <tr key={item.id} className="hover:bg-slate-50">
-                                                <td className="px-4 py-3 font-bold text-slate-800">{item.nome_produto}</td>
-                                                <td className="px-4 py-3 text-right text-slate-500">R$ {item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                                                <td className="px-4 py-3 text-right text-slate-600">{item.volume_total.toLocaleString('pt-BR')} {item.unidade}</td>
-                                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">{(item.volume_faturado || 0).toLocaleString('pt-BR')}</td>
-                                                <td className="px-4 py-3 text-right font-bold text-crop-600 bg-crop-50/30">{item.volume_restante.toLocaleString('pt-BR')} {item.unidade}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="font-bold text-slate-800">{item.nome_produto}</div>
+                                                    <div className="text-xs text-slate-500 font-medium">Embalagem: {item.unidade}</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-slate-500">R$ {item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                                <td className="px-4 py-3 text-right text-slate-600 font-medium">{item.volume_total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
+                                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">{(item.volume_faturado || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-crop-600 bg-crop-50/30">{item.volume_restante.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-slate-900">R$ {valorRestanteItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                             </tr>
-                                        ))}
+                                        )})}
                                     </tbody>
                                 </table>
                             </div>

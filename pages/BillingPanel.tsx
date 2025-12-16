@@ -454,21 +454,29 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                </div>
              </div>
              <div className="p-5 flex-1 space-y-4">
-               {/* Exibir Produto */}
+               {/* Exibir Produto e Embalagem */}
                <div className="mb-2 pb-2 border-b border-slate-50">
-                   <p className="text-[10px] text-slate-400 font-bold uppercase">Produto</p>
+                   <p className="text-[10px] text-slate-400 font-bold uppercase">Produtos / Embalagens</p>
                    {sol.itens_solicitados && sol.itens_solicitados.length > 1 ? (
-                       <ul className="space-y-1 mt-1">
+                       <ul className="space-y-1.5 mt-1">
                            {sol.itens_solicitados.map((item, idx) => (
-                               <li key={idx} className="flex justify-between text-xs text-slate-700">
-                                   <span>{item.nome_produto}</span>
+                               <li key={idx} className="flex justify-between items-start text-xs text-slate-700 bg-slate-50/50 p-2 rounded border border-slate-100">
+                                   <div>
+                                       <div className="font-bold">{item.nome_produto}</div>
+                                       <div className="text-[10px] text-slate-500">Embalagem: {item.unidade}</div>
+                                   </div>
                                    <div className="flex flex-col items-end">
-                                      <span className="font-bold">{item.volume} {item.unidade}</span>
-                                      {item.obs && <span className="text-[9px] text-slate-400 italic">Obs: {item.obs}</span>}
+                                      <span className="font-bold text-crop-600">{item.volume.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</span>
+                                      {item.obs && <span className="text-[9px] text-slate-400 italic mt-0.5">Obs: {item.obs}</span>}
                                    </div>
                                </li>
                            ))}
                        </ul>
+                   ) : sol.itens_solicitados && sol.itens_solicitados.length === 1 ? (
+                       <div className="mt-1">
+                           <p className="text-sm font-semibold text-slate-700">{sol.itens_solicitados[0].nome_produto}</p>
+                           <p className="text-xs text-slate-500">Embalagem: {sol.itens_solicitados[0].unidade}</p>
+                       </div>
                    ) : (
                        <p className="text-sm font-semibold text-slate-700 leading-tight">{sol.nome_produto || 'Não identificado'}</p>
                    )}
@@ -476,15 +484,15 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                
                <div className="flex justify-between items-end">
                   <div>
-                    <p className="text-xs text-slate-500 font-semibold uppercase">Volume Solicitado</p>
-                    <p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">{sol.unidade}</span></p>
+                    <p className="text-xs text-slate-500 font-semibold uppercase">Volume a Faturar</p>
+                    <p className="text-2xl font-bold text-slate-800">{sol.volume_solicitado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                   </div>
                   <div className="text-right">
-                       <p className="text-xs text-slate-500 font-semibold uppercase">Valor Solicitado</p>
+                       <p className="text-xs text-slate-500 font-semibold uppercase">Valor do Pedido</p>
                        <p className="text-xl font-bold text-slate-900">
-                         {sol.valor_solicitado 
-                            ? sol.valor_solicitado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
-                            : <span className="text-slate-400 text-sm">Não calc.</span>
+                         {sol.valor_solicitado
+                            ? sol.valor_solicitado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : <span className="text-slate-400 text-sm">Não calculado</span>
                          }
                        </p>
                    </div>
