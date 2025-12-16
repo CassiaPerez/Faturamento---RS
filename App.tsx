@@ -18,13 +18,20 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
-  // Carrega sessão salva ao iniciar
+  // Carrega sessão salva ao iniciar e atualiza dados do usuário do banco
   useEffect(() => {
-    const savedSession = api.getCurrentSession();
-    if (savedSession) {
-      setCurrentUser(savedSession);
-    }
-    setIsLoadingSession(false);
+    const loadSession = async () => {
+      const savedSession = api.getCurrentSession();
+      if (savedSession) {
+        setCurrentUser(savedSession);
+        const refreshedUser = await api.refreshCurrentUser();
+        if (refreshedUser && JSON.stringify(refreshedUser) !== JSON.stringify(savedSession)) {
+          setCurrentUser(refreshedUser);
+        }
+      }
+      setIsLoadingSession(false);
+    };
+    loadSession();
   }, []);
 
   // Configuração do Timer de Sincronização Automática (30 minutos)

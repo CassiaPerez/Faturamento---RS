@@ -669,6 +669,28 @@ export const api = {
   logout: () => {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION);
   },
+
+  refreshCurrentUser: async (): Promise<User | null> => {
+    const currentSession = loadFromStorage<User | null>(STORAGE_KEYS.CURRENT_SESSION, null);
+    if (!currentSession || currentSession.role === Role.ADMIN) {
+      return currentSession;
+    }
+    try {
+      const { data, error } = await supabase.from('app_users').select('*').eq('id', currentSession.id).maybeSingle();
+      if (!error && data) {
+        const updatedUser = data as User;
+        saveToStorage(STORAGE_KEYS.CURRENT_SESSION, updatedUser);
+        const existingIdx = localUsers.findIndex(u => u.id === updatedUser.id);
+        if (existingIdx !== -1) localUsers[existingIdx] = updatedUser;
+        else localUsers.push(updatedUser);
+        saveToStorage(STORAGE_KEYS.USERS, localUsers);
+        return updatedUser;
+      }
+    } catch (e) {
+      console.warn("Erro ao atualizar sessão do usuário", e);
+    }
+    return currentSession;
+  },
   
   getSystemConfig: async () => { 
     return { 
