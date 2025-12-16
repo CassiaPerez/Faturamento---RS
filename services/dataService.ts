@@ -1409,8 +1409,10 @@ export const api = {
         const novosPedidos = parseCSV(csvText);
         if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado.");
 
-        let added = 0; let updated = 0; let preserved = 0;
+        let added = 0; let updated = 0; let preserved = 0; let removed = 0;
         const currentDeletedIds = loadFromStorage(STORAGE_KEYS.DELETED_IDS, []);
+
+        const novosPedidosIds = novosPedidos.map(p => String(p.id));
 
         novosPedidos.forEach(novo => {
             if (currentDeletedIds.includes(String(novo.id))) return;
@@ -1462,9 +1464,32 @@ export const api = {
             }
         });
 
+        // REMOÇÃO: Remove pedidos que não estão mais no CSV (exceto os com solicitações)
+        const pedidosParaManter = localPedidos.filter(pedido => {
+            const estaNoCSV = novosPedidosIds.includes(String(pedido.id));
+
+            // Se está no CSV, mantém
+            if (estaNoCSV) return true;
+
+            // Se NÃO está no CSV, verifica se tem solicitações
+            const temSolicitacoes = localSolicitacoes.some(s => s.pedido_id === pedido.id);
+
+            // Se tem solicitações, PRESERVA (mantém)
+            if (temSolicitacoes) {
+                preserved++;
+                return true;
+            }
+
+            // Se NÃO tem solicitações, REMOVE
+            removed++;
+            return false;
+        });
+
+        localPedidos = pedidosParaManter;
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
 
         try {
+          // SYNC: Atualiza/insere pedidos do CSV
           for (const pedido of novosPedidos) {
             if (currentDeletedIds.includes(String(pedido.id))) continue;
 
@@ -1517,11 +1542,47 @@ export const api = {
               await supabase.from('pedidos').insert(pedidoPayload);
             }
           }
+
+          // REMOÇÃO: Remove do Supabase pedidos que não estão no CSV (exceto os com solicitações)
+          const { data: todosOsPedidosDB } = await supabase
+            .from('pedidos')
+            .select('id');
+
+          if (todosOsPedidosDB) {
+            for (const pedidoDB of todosOsPedidosDB) {
+              const estaNoCSV = novosPedidosIds.includes(String(pedidoDB.id));
+
+              // Se está no CSV, ignora
+              if (estaNoCSV) continue;
+
+              // Verifica se tem solicitações
+              const { data: solicitacoes } = await supabase
+                .from('solicitacoes')
+                .select('id')
+                .eq('pedido_id', pedidoDB.id)
+                .limit(1);
+
+              const temSolicitacoes = solicitacoes && solicitacoes.length > 0;
+
+              // PROTEÇÃO: Não remove se tem solicitações
+              if (temSolicitacoes) continue;
+
+              // REMOVE: Pedido não está no CSV e não tem solicitações
+              await supabase
+                .from('pedidos')
+                .delete()
+                .eq('id', pedidoDB.id);
+            }
+          }
         } catch (e) {
           console.warn("Erro ao sincronizar pedidos com Supabase", e);
         }
 
-        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: [`Novos: ${added}`, `Atualizados: ${updated}`, `Preservados: ${preserved}`] };
+        const mensagensLog = [`Novos: ${added}`, `Atualizados: ${updated}`];
+        if (preserved > 0) mensagensLog.push(`Preservados: ${preserved}`);
+        if (removed > 0) mensagensLog.push(`Removidos: ${removed}`);
+
+        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: mensagensLog };
         localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
 
         return { added, updated };
