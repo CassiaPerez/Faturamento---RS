@@ -95,13 +95,15 @@ export interface SolicitacaoFaturamento {
   numero_pedido: string;
   codigo_cliente?: string;
   nome_cliente: string;
-  
+  codigo_vendedor?: string;
+  nome_vendedor?: string;
+
   // Campo legado para compatibilidade visual (contém resumo: "Prod A: 10 | Prod B: 20")
-  nome_produto: string; 
+  nome_produto: string;
   unidade: string;
   volume_solicitado: number; // Soma dos volumes para KPI
   valor_solicitado?: number; // Valor monetário total da solicitação
-  
+
   // Detalhe real da solicitação
   itens_solicitados?: ItemSolicitado[];
   // Detalhe do que foi efetivamente faturado (se diferente do solicitado)
@@ -118,7 +120,7 @@ export interface SolicitacaoFaturamento {
   obs_comercial?: string;
   obs_credito?: string;
   obs_vendedor?: string;
-  
+
   prazo_pedido?: string;
   obs_faturamento?: string;
   obs_emissao_nf?: string;

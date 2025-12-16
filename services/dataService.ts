@@ -882,13 +882,15 @@ export const api = {
       numero_pedido: pedido.numero_pedido,
       codigo_cliente: pedido.codigo_cliente,
       nome_cliente: pedido.nome_cliente,
+      codigo_vendedor: pedido.codigo_vendedor,
+      nome_vendedor: pedido.nome_vendedor,
 
       // Campos de compatibilidade
       nome_produto: resumoProdutos,
-      unidade: itensSolicitados[0]?.unidade || 'TN', 
+      unidade: itensSolicitados[0]?.unidade || 'TN',
       volume_solicitado: volumeTotalSolicitado,
-      valor_solicitado: valorTotalSolicitado, // Novo campo
-      
+      valor_solicitado: valorTotalSolicitado,
+
       // Novo campo detalhado
       itens_solicitados: itensSolicitados,
 
@@ -904,6 +906,8 @@ export const api = {
         numero_pedido: novaSolicitacao.numero_pedido,
         codigo_cliente: novaSolicitacao.codigo_cliente,
         nome_cliente: novaSolicitacao.nome_cliente,
+        codigo_vendedor: novaSolicitacao.codigo_vendedor,
+        nome_vendedor: novaSolicitacao.nome_vendedor,
         nome_produto: novaSolicitacao.nome_produto,
         unidade: novaSolicitacao.unidade,
         volume_solicitado: novaSolicitacao.volume_solicitado,

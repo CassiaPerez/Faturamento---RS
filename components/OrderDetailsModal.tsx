@@ -101,6 +101,29 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
             </div>
           </div>
 
+          {(solicitacao.codigo_vendedor || solicitacao.nome_vendedor) && (
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+              <div className="flex items-center gap-2 mb-3">
+                <User className="text-amber-600" size={20} />
+                <h3 className="font-semibold text-gray-800">Vendedor Responsável</h3>
+              </div>
+              <div className="space-y-2">
+                {solicitacao.codigo_vendedor && (
+                  <div>
+                    <span className="text-sm text-gray-600">Código:</span>
+                    <p className="font-medium text-gray-800">{solicitacao.codigo_vendedor}</p>
+                  </div>
+                )}
+                {solicitacao.nome_vendedor && (
+                  <div>
+                    <span className="text-sm text-gray-600">Nome:</span>
+                    <p className="font-medium text-gray-800">{solicitacao.nome_vendedor}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
             <div className="flex items-center gap-2 mb-3">
               <Package className="text-purple-600" size={20} />

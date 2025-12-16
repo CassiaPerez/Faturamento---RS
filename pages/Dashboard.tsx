@@ -122,13 +122,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                       </div>
                       <h4 className="font-bold text-slate-800">{item.nome_cliente}</h4>
                       <p className="text-xs text-slate-500">{item.nome_produto}</p>
+                      {(item.codigo_vendedor || item.nome_vendedor) && (
+                         <span className="inline-block mt-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">
+                           Vendedor: {item.codigo_vendedor} - {item.nome_vendedor}
+                         </span>
+                      )}
                       {item.prazo_pedido && (
-                         <span className="inline-block mt-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                         <span className="inline-block mt-1 ml-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
                            Prazo: {item.prazo_pedido}
                          </span>
                       )}
                     </div>
-                    
+
                     <div className="text-right">
                        <p className="text-[10px] text-slate-400 font-bold uppercase">Volume</p>
                        <div className="flex items-center justify-end gap-2">
@@ -273,6 +278,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                       </div>
                       <h4 className="font-bold text-slate-800 text-base truncate">{order.nome_cliente}</h4>
                       <p className="text-xs text-slate-500 mt-0.5 truncate">{order.nome_produto}</p>
+                      {(order.codigo_vendedor || order.nome_vendedor) && (
+                        <p className="text-xs text-amber-600 mt-1 truncate">
+                          Vendedor: {order.codigo_vendedor} - {order.nome_vendedor}
+                        </p>
+                      )}
                     </div>
                     
                     <div className="flex items-center justify-between md:justify-end gap-6 md:w-1/3">
