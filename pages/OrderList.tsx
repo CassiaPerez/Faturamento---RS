@@ -424,7 +424,7 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                     
                     <div className="flex-1 min-w-0 pl-3">
                         <div className="flex items-center gap-3 mb-1">
-                            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded border border-slate-300">{p.numero_pedido}</span>
+                            <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded border border-blue-200">{p.numero_pedido}</span>
                             <span className="text-xs font-medium text-slate-400"><Calendar size={12} className="inline mr-1"/>{new Date(p.data_criacao).toLocaleDateString()}</span>
                             {renderStatusBadge(p)}
                         </div>
