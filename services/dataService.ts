@@ -420,18 +420,19 @@ const parseCSV = (csvText: string): Pedido[] => {
     const headers = lines[headerIndex].toLowerCase().split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
     const getIdx = (keywords: string[]) => headers.findIndex(h => keywords.some(k => h.includes(k)));
 
-    // MAPA DE COLUNAS - ATUALIZADO PARA NOVO FORMATO CSV
-    const idxNumero = getIdx(['nro_pedido', 'numero_pedido', 'numero', 'pedido', 'nro', 'doc', 'ordem', 'nr_pedido']);
-    const idxCliente = getIdx(['nome_pessoa', 'cliente', 'nome', 'parceiro']);
-
-    // Priorizar 'descricao' do novo formato
+    // MAPA DE COLUNAS - APRIMORADO
+    const idxNumero = getIdx(['numero', 'pedido', 'nro', 'doc', 'ordem', 'nr_pedido']);
+    const idxCliente = getIdx(['cliente', 'nome', 'parceiro']);
+    
+    // CRÍTICO: Remover 'item' genérico para evitar match com 'COD_ITEM'
+    // Priorizar 'descricao', 'descrição', 'produto', 'material'
     const idxProduto = getIdx(['descricao', 'descrição', 'produto', 'material', 'especificacao', 'mercadoria', 'texto']);
-
+    
     const idxUnidade = getIdx(['unidade', 'und', 'un']);
-    const idxVolume = getIdx(['quantidade', 'volume', 'qtd', 'saldo']);
-    const idxValor = getIdx(['valor_liquido', 'liquido', 'valor', 'total', 'montante', 'bruto']);
+    const idxVolume = getIdx(['volume', 'qtd', 'quantidade', 'saldo']);
+    const idxValor = getIdx(['valor', 'total', 'montante', 'bruto', 'liquido']);
     const idxVendedor = getIdx(['vendedor', 'rep', 'representante']);
-    const idxCodVendedor = getIdx(['cod_vendedor', 'codigo_vendedor', 'cod_vend', 'cod.vend', 'cd_vend', 'vendedor_id']);
+    const idxCodVendedor = getIdx(['cod_vend', 'codigo_vendedor', 'cod.vend', 'cd_vend', 'vendedor_id']);
     
     // Map para agrupar itens pelo número do pedido
     const pedidosMap = new Map<string, Pedido>();
