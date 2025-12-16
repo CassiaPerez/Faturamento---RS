@@ -1,7 +1,8 @@
 import { Pedido, PedidoItem, ItemSolicitado, SolicitacaoFaturamento, LogSincronizacao, StatusPedido, StatusSolicitacao, Role, User, HistoricoEvento } from '../types';
 import { supabase } from './supabaseClient';
+import vendedorCodigoData from './data/vendedor_codigo_unificado.json';
 
-/* 
+/*
   === ARQUITETURA: HÍBRIDA (SUPABASE + LOCAL STORAGE) ===
   Melhoria: Persistência local para garantir funcionamento mesmo sem conexão DB.
 */
@@ -63,6 +64,61 @@ let deletedIds: string[] = loadFromStorage(STORAGE_KEYS.DELETED_IDS, []);
 // Cache para eventos recentes
 let sessionEvents: HistoricoEvento[] = [];
 
+// Gera lista de vendedores a partir do JSON
+const generateVendedoresFromJSON = () => {
+  const vendedores: User[] = [];
+  const emailMap: { [key: string]: string[] } = {
+    'DESESSARDS E VIEIRA REPRESENTACOES LTDA': ['desessards@cropflow.com'],
+    'EDUARDO FATTORE E CIA LTDA': ['eduardo@cropflow.com'],
+    'DANIEL LORENZONI LTDA': ['daniel@cropflow.com'],
+    'AGRO RUPPENTHAL SERVICOS DE INFORMATICA LTDA': ['maurel@cropflow.com'],
+    'A. J. DEBONI & CIA LTDA': ['deboni@cropflow.com'],
+    'GLOWACKI AGENCIAMENTOS DE INSUMOS AGRICOLAS LTDA': ['glowacki@cropflow.com'],
+    'MARCIO BLANGER': ['marcio@cropflow.com'],
+    'CROPFIELD DO BRASIL S.A.': ['matriz@cropflow.com'],
+    'PEDRO HENRIQUE DE BONA': ['pedro@cropflow.com'],
+    'RODRIGO LUIS DA SILVA': ['rodrigo.silva@cropflow.com'],
+    'RD AGENCIAMENTO DE MAQ E INS AGRIC LTDA - RODRIGO DARIVA': ['rodrigo.dariva@cropflow.com'],
+    'LARISSA WILKE TEIXEIRA': ['larissa@cropflow.com'],
+    'FABIO DA ROCHA CORBELLINI EIRELI': ['fabio@cropflow.com'],
+    'RONALDO ROSSLER RIBAS - ME': ['ronaldo@cropflow.com'],
+    'DANTE LUIS DAMIANI': ['dante@cropflow.com'],
+    'ROBSON SUHRE DE CAMPOS': ['robson@cropflow.com'],
+    'VALDECIR ALVES DE OLIVEIRA-ME': ['valdecir@cropflow.com'],
+    'VEIT CONSULTORIA AGRICOLA EIRELI': ['andre.veit@cropflow.com'],
+    'BAGUAL AGRO PARTICIPACOES EIRELI': ['bagual@cropflow.com'],
+    'CASSIO MARQUES FERREIRA': ['cassio@cropflow.com'],
+    'LEONARDO WILKE TEIXEIRA': ['leonardo@cropflow.com']
+  };
+
+  const codigosPorVendedor: { [key: string]: string[] } = {};
+
+  vendedorCodigoData.forEach(item => {
+    if (!codigosPorVendedor[item.VENDEDOR]) {
+      codigosPorVendedor[item.VENDEDOR] = [];
+    }
+    codigosPorVendedor[item.VENDEDOR].push(String(item.ID_VENDEDOR), String(item.COD_VENDEDOR));
+  });
+
+  let index = 1;
+  Object.keys(codigosPorVendedor).forEach(vendedorNome => {
+    const email = emailMap[vendedorNome]?.[0] || `vendedor${index}@cropflow.com`;
+    if (!vendedorNome.includes('INATIVO') && !vendedorNome.includes('NAO UTILIZAR') && !vendedorNome.includes('VENDAS INTERNAS')) {
+      vendedores.push({
+        id: `v${index}`,
+        name: vendedorNome,
+        role: Role.VENDEDOR,
+        email: email,
+        password: '123',
+        sales_codes: [...new Set(codigosPorVendedor[vendedorNome])]
+      });
+      index++;
+    }
+  });
+
+  return vendedores;
+};
+
 // MOCK USERS (Fallback Inicial)
 export const MOCK_USERS: User[] = [
   { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: 'administrador@grupocropfield.com.br', password: 'Cp261121@!' },
@@ -70,28 +126,7 @@ export const MOCK_USERS: User[] = [
   { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropflow.com', password: '123' },
   { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropflow.com', password: '123' },
   { id: 'u7', name: 'Analista Crédito', role: Role.CREDITO, email: 'credito@cropflow.com', password: '123' },
-  // VENDEDORES COM CÓDIGOS REAIS (Baseados na imagem enviada)
-  { id: 'v1', name: 'DESESSARDS E VIEIRA REPRESENTACOES LTDA', role: Role.VENDEDOR, email: 'desessards@cropflow.com', password: '123', sales_codes: ['85400', '255340'] },
-  { id: 'v2', name: 'EDUARDO FATTORE E CIA LTDA', role: Role.VENDEDOR, email: 'eduardo@cropflow.com', password: '123', sales_codes: ['107806', '275706', '80732', '251623'] },
-  { id: 'v3', name: 'DANIEL LORENZONI LTDA', role: Role.VENDEDOR, email: 'daniel@cropflow.com', password: '123', sales_codes: ['76147', '247945'] },
-  { id: 'v4', name: 'AGRO RUPPENTHAL SERVICOS DE INFORMATICA LTDA', role: Role.VENDEDOR, email: 'maurel@cropflow.com', password: '123', sales_codes: ['108530', '276266'] },
-  { id: 'v5', name: 'A. J. DEBONI & CIA LTDA', role: Role.VENDEDOR, email: 'deboni@cropflow.com', password: '123', sales_codes: ['81125', '251932'] },
-  { id: 'v6', name: 'GLOWACKI AGENCIAMENTOS', role: Role.VENDEDOR, email: 'glowacki@cropflow.com', password: '123', sales_codes: ['25821', '745893'] },
-  { id: 'v7', name: 'MARCIO BLANGER', role: Role.VENDEDOR, email: 'marcio@cropflow.com', password: '123', sales_codes: ['18872', '212085'] },
-  { id: 'v8', name: 'CROPFIELD DO BRASIL S.A.', role: Role.VENDEDOR, email: 'matriz@cropflow.com', password: '123', sales_codes: ['23795', '216023'] },
-  { id: 'v9', name: 'PEDRO HENRIQUE DE BONA', role: Role.VENDEDOR, email: 'pedro@cropflow.com', password: '123', sales_codes: ['11577', '101471'] },
-  { id: 'v10', name: 'RODRIGO LUIS DA SILVA', role: Role.VENDEDOR, email: 'rodrigo.silva@cropflow.com', password: '123', sales_codes: ['21183', '214231'] },
-  { id: 'v11', name: 'RODRIGO DARIVA', role: Role.VENDEDOR, email: 'rodrigo.dariva@cropflow.com', password: '123', sales_codes: ['23119', '215538'] },
-  { id: 'v12', name: 'LARISSA WILKE TEIXEIRA', role: Role.VENDEDOR, email: 'larissa@cropflow.com', password: '123', sales_codes: ['43269', '230157'] },
-  { id: 'v13', name: 'DANTE LUIS DAMIANI', role: Role.VENDEDOR, email: 'dante@cropflow.com', password: '123', sales_codes: ['25764', '745842', '87229', '256841', '89980', '259032', '45733', '232007'] },
-  { id: 'v14', name: 'FABIO DA ROCHA CORBELLINI', role: Role.VENDEDOR, email: 'fabio@cropflow.com', password: '123', sales_codes: ['54318', '238772'] },
-  { id: 'v15', name: 'RONALDO ROSSLER RIBAS', role: Role.VENDEDOR, email: 'ronaldo@cropflow.com', password: '123', sales_codes: ['77730', '249228'] },
-  { id: 'v16', name: 'ROBSON SUHRE DE CAMPOS', role: Role.VENDEDOR, email: 'robson@cropflow.com', password: '123', sales_codes: ['59984', '242974'] },
-  { id: 'v17', name: 'VALDECIR ALVES DE OLIVEIRA', role: Role.VENDEDOR, email: 'valdecir@cropflow.com', password: '123', sales_codes: ['58785', '242075'] },
-  { id: 'v18', name: 'VEIT CONSULTORIA AGRICOLA', role: Role.VENDEDOR, email: 'andre.veit@cropflow.com', password: '123', sales_codes: ['54506', '238910'] },
-  { id: 'v19', name: 'BAGUAL AGRO PARTICIPACOES', role: Role.VENDEDOR, email: 'bagual@cropflow.com', password: '123', sales_codes: ['34849', '223797'] },
-  { id: 'v20', name: 'CASSIO MARQUES FERREIRA', role: Role.VENDEDOR, email: 'cassio@cropflow.com', password: '123', sales_codes: ['29994', '220363'] },
-  { id: 'v21', name: 'LEONARDO WILKE TEIXEIRA', role: Role.VENDEDOR, email: 'leonardo@cropflow.com', password: '123', sales_codes: ['91532', '260263'] }
+  ...generateVendedoresFromJSON()
 ];
 let localUsers: User[] = loadFromStorage(STORAGE_KEYS.USERS, [...MOCK_USERS]);
 
