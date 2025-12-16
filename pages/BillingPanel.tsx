@@ -639,7 +639,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
                )}
 
                {activeTab === 'triage' && sol.status === StatusSolicitacao.EM_ANALISE && (
-                   <div className="w-full px-4 py-2 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg border border-slate-200 text-center flex items-center justify-center gap-2">
+                   <div className="w-full px-4 py-2 text-xs font-bold text-slate-700 bg-slate-200 rounded-lg border border-slate-300 text-center flex items-center justify-center gap-2">
                        <Clock size={14} /> Aguardando Setores...
                    </div>
                )}
