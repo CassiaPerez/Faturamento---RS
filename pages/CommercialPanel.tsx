@@ -256,8 +256,7 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
              <div className="p-5 border-b border-slate-100 bg-gradient-to-b from-blue-50/50 to-white flex justify-between items-start">
                <div>
                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span>
-                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={`${sol.codigo_cliente ? `[${sol.codigo_cliente}] ` : ''}${sol.nome_cliente}`}>
-                   {sol.codigo_cliente && <span className="text-blue-600 mr-1">[{sol.codigo_cliente}]</span>}
+                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>
                    {sol.nome_cliente}
                  </h4>
                </div>

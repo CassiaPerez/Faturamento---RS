@@ -74,12 +74,6 @@ export default function OrderDetailsModal({ isOpen, onClose, solicitacao }: Orde
                   <span className="text-sm text-gray-600">Nome:</span>
                   <p className="font-medium text-gray-800">{solicitacao.nome_cliente}</p>
                 </div>
-                {solicitacao.codigo_cliente && (
-                  <div>
-                    <span className="text-sm text-gray-600">Código:</span>
-                    <p className="font-medium text-gray-800">{solicitacao.codigo_cliente}</p>
-                  </div>
-                )}
               </div>
             </div>
 

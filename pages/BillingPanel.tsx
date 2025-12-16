@@ -434,8 +434,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
              <div className="p-5 border-b border-slate-100 flex justify-between items-start bg-gradient-to-b from-slate-50 to-white">
                <div>
                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">{sol.numero_pedido}</span>
-                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={`${sol.codigo_cliente ? `[${sol.codigo_cliente}] ` : ''}${sol.nome_cliente}`}>
-                   {sol.codigo_cliente && <span className="text-crop-600 mr-1">[{sol.codigo_cliente}]</span>}
+                 <h4 className="font-bold text-slate-900 line-clamp-1 text-lg" title={sol.nome_cliente}>
                    {sol.nome_cliente}
                  </h4>
                  {sol.status === StatusSolicitacao.REJEITADO && (
