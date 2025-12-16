@@ -380,6 +380,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
     switch (role) {
       case Role.CREDITO: return 'bg-indigo-50 text-indigo-700 border-indigo-200';
       case Role.COMERCIAL: return 'bg-blue-50 text-blue-700 border-blue-200';
+      case Role.ANALISTA_COMERCIAL: return 'bg-cyan-50 text-cyan-700 border-cyan-200';
       case Role.FATURAMENTO: return 'bg-orange-50 text-orange-700 border-orange-200';
       default: return 'bg-red-50 text-red-700 border-red-200';
     }
@@ -389,6 +390,7 @@ const BillingPanel: React.FC<{ user: User }> = ({ user }) => {
     switch (role) {
       case Role.CREDITO: return 'CRÉDITO';
       case Role.COMERCIAL: return 'COMERCIAL';
+      case Role.ANALISTA_COMERCIAL: return 'ANALISTA COMERCIAL';
       case Role.FATURAMENTO: return 'FATURAMENTO';
       case Role.ADMIN: return 'ADMINISTRADOR';
       default: return 'BLOQUEADO';

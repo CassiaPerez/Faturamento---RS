@@ -137,10 +137,10 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
     if (aprovados.length === 0 && rejeitados.length > 0) {
         if (!confirm("Todos os itens foram desmarcados. Isso rejeitará a solicitação inteira. Continuar?")) return;
         // Chama fluxo de rejeição global usando a primeira obs
-        await api.updateSolicitacaoStatus(approveId, StatusSolicitacao.REJEITADO, user, rejeitados[0].obs, Role.COMERCIAL);
+        await api.updateSolicitacaoStatus(approveId, StatusSolicitacao.REJEITADO, user, rejeitados[0].obs, user.role);
     } else {
         // Fluxo normal ou parcial
-        await api.approveSolicitacaoStep(approveId, Role.COMERCIAL, user, approvalObservation, aprovados, rejeitados);
+        await api.approveSolicitacaoStep(approveId, user.role, user, approvalObservation, aprovados, rejeitados);
     }
     
     // Atualiza localmente (Simplificado, reload ideal seria via fetch novamente)
@@ -159,10 +159,11 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
 
   const handleConfirmRejection = async () => {
     if (!rejectId || !rejectReason.trim()) return;
-    // Passa Role.COMERCIAL explicitamente para garantir que o bloqueio seja atribuído ao setor correto
-    await api.updateSolicitacaoStatus(rejectId, StatusSolicitacao.REJEITADO, user, rejectReason, Role.COMERCIAL);
-    const formattedReason = `[BLOQUEIO: COMERCIAL] ${rejectReason}`;
-    setSolicitacoes(prev => prev.map(s => s.id === rejectId ? { ...s, status: StatusSolicitacao.REJEITADO, motivo_rejeicao: formattedReason, blocked_by: Role.COMERCIAL } : s));
+    // Passa o role do usuário atual para garantir que o bloqueio seja atribuído corretamente
+    await api.updateSolicitacaoStatus(rejectId, StatusSolicitacao.REJEITADO, user, rejectReason, user.role);
+    const sectorLabel = user.role === Role.ANALISTA_COMERCIAL ? 'ANALISTA COMERCIAL' : 'COMERCIAL';
+    const formattedReason = `[BLOQUEIO: ${sectorLabel}] ${rejectReason}`;
+    setSolicitacoes(prev => prev.map(s => s.id === rejectId ? { ...s, status: StatusSolicitacao.REJEITADO, motivo_rejeicao: formattedReason, blocked_by: user.role } : s));
     setIsRejectModalOpen(false);
     setRejectId(null);
   };
@@ -206,13 +207,14 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
 
   // Regra Estrita: Só pode desbloquear se for Admin ou se foi o Comercial que bloqueou
   const canUnblock = (sol: SolicitacaoFaturamento) => {
-     return user.role === Role.ADMIN || sol.blocked_by === Role.COMERCIAL;
+     return user.role === Role.ADMIN || sol.blocked_by === Role.COMERCIAL || sol.blocked_by === Role.ANALISTA_COMERCIAL;
   };
 
   const getBlockerColor = (role?: Role) => {
     switch (role) {
       case Role.CREDITO: return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case Role.COMERCIAL: return 'bg-blue-100 text-blue-800 border-blue-200';
+      case Role.ANALISTA_COMERCIAL: return 'bg-cyan-100 text-cyan-800 border-cyan-200';
       case Role.FATURAMENTO: return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-red-50 text-red-700 border-red-100';
     }
@@ -222,6 +224,7 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
     switch (role) {
       case Role.CREDITO: return 'SETOR CRÉDITO';
       case Role.COMERCIAL: return 'SETOR COMERCIAL';
+      case Role.ANALISTA_COMERCIAL: return 'ANALISTA COMERCIAL';
       case Role.FATURAMENTO: return 'SETOR FATURAMENTO';
       default: return 'BLOQUEADO';
     }
@@ -371,7 +374,7 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
                        )}
                     </div>
                      <p className="text-xs text-red-700 leading-relaxed font-medium break-words">{sol.motivo_rejeicao.replace(/\[.*?\]\s*/, '')}</p>
-                     {sol.blocked_by && sol.blocked_by !== Role.COMERCIAL && (
+                     {sol.blocked_by && sol.blocked_by !== Role.COMERCIAL && sol.blocked_by !== Role.ANALISTA_COMERCIAL && (
                         <p className="text-[10px] text-red-500 mt-2 border-t border-red-100 pt-1 italic flex items-center gap-1">
                            <Lock size={8} /> Bloqueado por: {sol.blocked_by}
                         </p>

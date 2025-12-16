@@ -65,10 +65,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, currentView, onN
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [Role.ADMIN, Role.GERENTE, Role.VENDEDOR, Role.FATURAMENTO, Role.COMERCIAL, Role.CREDITO] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [Role.ADMIN, Role.GERENTE, Role.VENDEDOR, Role.FATURAMENTO, Role.COMERCIAL, Role.ANALISTA_COMERCIAL, Role.CREDITO] },
     { id: 'orders', label: 'Carteira de Pedidos', icon: Package, roles: [Role.ADMIN, Role.GERENTE, Role.VENDEDOR] },
     { id: 'billing', label: 'Faturamento', icon: CreditCard, roles: [Role.ADMIN, Role.GERENTE, Role.FATURAMENTO] },
-    { id: 'commercial', label: 'Aprovação Comercial', icon: TrendingUp, roles: [Role.ADMIN, Role.GERENTE, Role.COMERCIAL] },
+    { id: 'commercial', label: 'Aprovação Comercial', icon: TrendingUp, roles: [Role.ADMIN, Role.GERENTE, Role.COMERCIAL, Role.ANALISTA_COMERCIAL] },
     { id: 'credit', label: 'Análise de Crédito', icon: Banknote, roles: [Role.ADMIN, Role.GERENTE, Role.CREDITO] },
     { id: 'sync', label: 'Sincronização', icon: RefreshCw, roles: [Role.ADMIN, Role.GERENTE] },
     { id: 'users', label: 'Usuários', icon: Users, roles: [Role.ADMIN] },

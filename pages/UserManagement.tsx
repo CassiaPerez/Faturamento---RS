@@ -12,6 +12,7 @@ const ROLE_DETAILS = {
   [Role.ADMIN]: { label: 'Administrador', description: 'Acesso total.', permissions: ['Tudo'], color: 'bg-red-50 text-red-700', icon: Shield },
   [Role.GERENTE]: { label: 'Gerente Comercial', description: 'Gestão de equipe.', permissions: ['Carteira Geral', 'Dashboards'], color: 'bg-purple-50 text-purple-700', icon: LayoutDashboard },
   [Role.COMERCIAL]: { label: 'Diretor Comercial', description: 'Aprovação.', permissions: ['Aprovar Comercial'], color: 'bg-blue-50 text-blue-700', icon: TrendingUp },
+  [Role.ANALISTA_COMERCIAL]: { label: 'Analista Comercial', description: 'Aprovação comercial.', permissions: ['Aprovar Comercial', 'Dashboard'], color: 'bg-cyan-50 text-cyan-700', icon: TrendingUp },
   [Role.CREDITO]: { label: 'Analista de Crédito', description: 'Análise risco.', permissions: ['Liberar Crédito'], color: 'bg-indigo-50 text-indigo-700', icon: Banknote },
   [Role.FATURAMENTO]: { label: 'Analista Faturamento', description: 'Emissão.', permissions: ['Faturar'], color: 'bg-orange-50 text-orange-700', icon: FileText },
   [Role.VENDEDOR]: { label: 'Vendedor', description: 'Carteira própria.', permissions: ['Pedidos'], color: 'bg-emerald-50 text-emerald-700', icon: ShoppingCart }

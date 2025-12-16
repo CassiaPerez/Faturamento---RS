@@ -121,6 +121,7 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
     switch (role) {
       case Role.CREDITO: return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case Role.COMERCIAL: return 'bg-blue-100 text-blue-800 border-blue-200';
+      case Role.ANALISTA_COMERCIAL: return 'bg-cyan-100 text-cyan-800 border-cyan-200';
       case Role.FATURAMENTO: return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-red-50 text-red-700 border-red-100';
     }
@@ -130,6 +131,7 @@ const CreditPanel: React.FC<{ user: User }> = ({ user }) => {
     switch (role) {
       case Role.CREDITO: return 'SETOR CRÉDITO';
       case Role.COMERCIAL: return 'SETOR COMERCIAL';
+      case Role.ANALISTA_COMERCIAL: return 'ANALISTA COMERCIAL';
       case Role.FATURAMENTO: return 'SETOR FATURAMENTO';
       default: return 'BLOQUEADO';
     }
