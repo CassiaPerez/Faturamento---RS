@@ -517,9 +517,9 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                                                     <div className="text-xs text-slate-500 font-medium">Embalagem: {item.unidade}</div>
                                                 </td>
                                                 <td className="px-4 py-3 text-right text-slate-500">R$ {item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                                                <td className="px-4 py-3 text-right text-slate-600 font-medium">{item.volume_total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
-                                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">{(item.volume_faturado || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
-                                                <td className="px-4 py-3 text-right font-bold text-crop-600 bg-crop-50/30">{item.volume_restante.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {item.unidade}</td>
+                                                <td className="px-4 py-3 text-right text-slate-600 font-medium">{item.volume_total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">{(item.volume_faturado || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-crop-600 bg-crop-50/30">{item.volume_restante.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                                 <td className="px-4 py-3 text-right font-bold text-slate-900">R$ {valorRestanteItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                             </tr>
                                         )})}
