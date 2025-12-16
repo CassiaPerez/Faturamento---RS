@@ -129,6 +129,18 @@ const cleanString = (val: any) => {
     return str === '' ? undefined : str;
 };
 
+const cleanProductName = (name: string): string => {
+    if (!name) return name;
+    // Remove códigos no final como: - B20, - A10, - C5, etc.
+    // Padrões: espaço + hífen + letra(s) + número(s)
+    let cleaned = name.replace(/\s*-\s*[A-Z]\d+\s*$/i, '');
+    // Remove códigos no final como: - 123, - 456
+    cleaned = cleaned.replace(/\s*-\s*\d+\s*$/, '');
+    // Remove códigos entre parênteses no final como: (B20), (A10)
+    cleaned = cleaned.replace(/\s*\([A-Z]\d+\)\s*$/i, '');
+    return cleaned.trim();
+};
+
 // Filter Data Logic
 const filterDataByRole = (data: Pedido[], user: User) => {
   if (user.role === Role.VENDEDOR) {
@@ -454,17 +466,17 @@ const parseCSV = (csvText: string): Pedido[] => {
         if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
         
         const numeroPedido = String(rawNumero).trim().replace(/\s/g, '');
-        
+
         // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
         let produto = 'Produto Geral';
         if (idxProduto >= 0 && cols[idxProduto] && cols[idxProduto].trim()) {
-             produto = cols[idxProduto].trim();
+             produto = cleanProductName(cols[idxProduto].trim());
         } else if (cols.length > 16 && cols[16] && cols[16].length > 3) {
              // Tenta pegar a coluna 16 (DESCRICAO no arquivo de exemplo)
-             produto = cols[16].trim();
+             produto = cleanProductName(cols[16].trim());
         } else if (cols[2] && cols[2].length > 5 && !cols[2].match(/^\d/)) {
              // Fallback legado
-             produto = cols[2].trim();
+             produto = cleanProductName(cols[2].trim());
         }
 
         const unidade = idxUnidade >= 0 ? cols[idxUnidade] : 'TN';
@@ -678,12 +690,19 @@ export const api = {
     }
 
     const safePedidos = localPedidos.map(p => {
+        // Limpa códigos dos nomes de produtos em todos os itens
+        const itensLimpos = (p.itens || []).map(item => ({
+            ...item,
+            nome_produto: cleanProductName(item.nome_produto)
+        }));
+
         if (!p.itens || p.itens.length === 0) {
             return {
                 ...p,
+                nome_produto: cleanProductName(p.nome_produto || 'Produto Geral'),
                 itens: [{
                     id: `${p.id}-1`,
-                    nome_produto: p.nome_produto || 'Produto Geral',
+                    nome_produto: cleanProductName(p.nome_produto || 'Produto Geral'),
                     unidade: p.unidade,
                     volume_total: p.volume_total,
                     volume_restante: p.volume_restante,
@@ -693,7 +712,11 @@ export const api = {
                 }]
             };
         }
-        return p;
+        return {
+            ...p,
+            nome_produto: cleanProductName(p.nome_produto),
+            itens: itensLimpos
+        };
     });
 
     if (JSON.stringify(safePedidos) !== JSON.stringify(localPedidos)) {
@@ -742,8 +765,15 @@ export const api = {
           ...s,
           id: String(s.id),
           data_solicitacao: s.data_solicitacao || s.created_at,
-          itens_solicitados: s.itens_solicitados || [],
-          itens_atendidos: s.itens_atendidos || undefined
+          itens_solicitados: (s.itens_solicitados || []).map((item: any) => ({
+            ...item,
+            nome_produto: cleanProductName(item.nome_produto)
+          })),
+          itens_atendidos: s.itens_atendidos ? s.itens_atendidos.map((item: any) => ({
+            ...item,
+            nome_produto: cleanProductName(item.nome_produto)
+          })) : undefined,
+          nome_produto: cleanProductName(s.nome_produto)
         })) as SolicitacaoFaturamento[];
         saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
       }
