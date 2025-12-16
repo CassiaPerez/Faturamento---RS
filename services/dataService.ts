@@ -197,11 +197,12 @@ const filterDataByRole = (data: Pedido[], user: User) => {
     if (user.sales_codes && user.sales_codes.length > 0) {
         const userCodes = user.sales_codes.map(normalizeCode);
         return data.filter(p => {
-            const orderCode = normalizeCode(p.codigo_vendedor);
-            return userCodes.includes(orderCode);
+            const codigoVendedor = normalizeCode(p.codigo_vendedor);
+            const idVendedor = normalizeCode(p.nome_vendedor);
+            return userCodes.includes(codigoVendedor) || userCodes.includes(idVendedor);
         });
     }
-    return data.filter(p => p.nome_vendedor && p.nome_vendedor.toLowerCase().includes(user.name.toLowerCase()));
+    return [];
   }
   return data;
 };
