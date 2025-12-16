@@ -64,6 +64,20 @@ let deletedIds: string[] = loadFromStorage(STORAGE_KEYS.DELETED_IDS, []);
 // Cache para eventos recentes
 let sessionEvents: HistoricoEvento[] = [];
 
+// Mapeia código do vendedor para nome do vendedor
+const getVendedorNomeByCodigo = (codigo: string): string => {
+  if (!codigo) return '';
+
+  const codigoNormalizado = normalizeCode(codigo);
+
+  const vendedor = vendedorCodigoData.find(v =>
+    normalizeCode(String(v.ID_VENDEDOR)) === codigoNormalizado ||
+    normalizeCode(String(v.COD_VENDEDOR)) === codigoNormalizado
+  );
+
+  return vendedor ? vendedor.VENDEDOR_FANTASIA || vendedor.VENDEDOR : '';
+};
+
 // Gera lista de vendedores a partir do JSON
 const generateVendedoresFromJSON = () => {
   const vendedores: User[] = [];
@@ -728,11 +742,15 @@ export const api = {
     try {
       const { data, error } = await supabase.from('pedidos').select('*').order('updated_at', { ascending: false });
       if (!error && data && data.length > 0) {
-        localPedidos = data.map(p => ({
-          ...p,
-          itens: p.itens || [],
-          data_criacao: p.data_criacao || p.created_at
-        })) as Pedido[];
+        localPedidos = data.map(p => {
+          const nomeVendedor = p.codigo_vendedor ? getVendedorNomeByCodigo(p.codigo_vendedor) : '';
+          return {
+            ...p,
+            itens: p.itens || [],
+            data_criacao: p.data_criacao || p.created_at,
+            nome_vendedor: nomeVendedor || p.nome_vendedor || ''
+          };
+        }) as Pedido[];
         saveToStorage(STORAGE_KEYS.PEDIDOS, localPedidos);
       }
     } catch (e) {
@@ -746,9 +764,13 @@ export const api = {
             nome_produto: cleanProductName(item.nome_produto)
         }));
 
+        // Garante que o nome do vendedor esteja preenchido
+        const nomeVendedorAtualizado = p.nome_vendedor || (p.codigo_vendedor ? getVendedorNomeByCodigo(p.codigo_vendedor) : '');
+
         if (!p.itens || p.itens.length === 0) {
             return {
                 ...p,
+                nome_vendedor: nomeVendedorAtualizado,
                 nome_produto: cleanProductName(p.nome_produto || 'Produto Geral'),
                 itens: [{
                     id: `${p.id}-1`,
@@ -764,6 +786,7 @@ export const api = {
         }
         return {
             ...p,
+            nome_vendedor: nomeVendedorAtualizado,
             nome_produto: cleanProductName(p.nome_produto),
             itens: itensLimpos
         };
@@ -811,34 +834,59 @@ export const api = {
     try {
       const { data, error } = await supabase.from('solicitacoes').select('*').order('created_at', { ascending: false });
       if (!error && data) {
-        localSolicitacoes = data.map(s => ({
-          ...s,
-          id: String(s.id),
-          data_solicitacao: s.data_solicitacao || s.created_at,
-          itens_solicitados: (s.itens_solicitados || []).map((item: any) => ({
-            ...item,
-            nome_produto: cleanProductName(item.nome_produto)
-          })),
-          itens_atendidos: s.itens_atendidos ? s.itens_atendidos.map((item: any) => ({
-            ...item,
-            nome_produto: cleanProductName(item.nome_produto)
-          })) : undefined,
-          nome_produto: cleanProductName(s.nome_produto)
-        })) as SolicitacaoFaturamento[];
+        localSolicitacoes = data.map(s => {
+          const nomeVendedor = s.codigo_vendedor ? getVendedorNomeByCodigo(s.codigo_vendedor) : '';
+          return {
+            ...s,
+            id: String(s.id),
+            data_solicitacao: s.data_solicitacao || s.created_at,
+            nome_vendedor: nomeVendedor || s.nome_vendedor || '',
+            itens_solicitados: (s.itens_solicitados || []).map((item: any) => ({
+              ...item,
+              nome_produto: cleanProductName(item.nome_produto)
+            })),
+            itens_atendidos: s.itens_atendidos ? s.itens_atendidos.map((item: any) => ({
+              ...item,
+              nome_produto: cleanProductName(item.nome_produto)
+            })) : undefined,
+            nome_produto: cleanProductName(s.nome_produto)
+          };
+        }) as SolicitacaoFaturamento[];
         saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
       }
     } catch (e) {
       console.warn("Usando cache local de solicitacoes", e);
     }
 
+    // Garante que todas as solicitações tenham o nome do vendedor preenchido
+    const solicitacoesAtualizadas = localSolicitacoes.map(s => {
+      if (!s.nome_vendedor && s.codigo_vendedor) {
+        return {
+          ...s,
+          nome_vendedor: getVendedorNomeByCodigo(s.codigo_vendedor)
+        };
+      }
+      return s;
+    });
+
     const solicitacoes = user.role === Role.VENDEDOR
-        ? localSolicitacoes.filter(s => s.criado_por === user.name)
-        : localSolicitacoes;
+        ? solicitacoesAtualizadas.filter(s => s.criado_por === user.name)
+        : solicitacoesAtualizadas;
     return solicitacoes;
   },
 
   getSolicitacoesByPedido: async (pedidoId: string): Promise<SolicitacaoFaturamento[]> => {
-    return localSolicitacoes.filter(s => s.pedido_id === pedidoId);
+    return localSolicitacoes
+      .filter(s => s.pedido_id === pedidoId)
+      .map(s => {
+        if (!s.nome_vendedor && s.codigo_vendedor) {
+          return {
+            ...s,
+            nome_vendedor: getVendedorNomeByCodigo(s.codigo_vendedor)
+          };
+        }
+        return s;
+      });
   },
   
   getHistoricoPedido: async (pedidoId: string): Promise<HistoricoEvento[]> => {
