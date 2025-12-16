@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { User, Role } from '../types';
 import { api } from '../services/dataService';
-import { 
-  LayoutDashboard, 
-  Package, 
-  CreditCard, 
-  RefreshCw, 
+import {
+  LayoutDashboard,
+  Package,
+  CreditCard,
+  RefreshCw,
   User as UserIcon,
   ChevronDown,
   Bell,
@@ -18,7 +18,8 @@ import {
   Menu,
   X,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  LogOut
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -26,9 +27,10 @@ interface LayoutProps {
   currentUser: User;
   currentView: string;
   onNavigate: (view: string) => void;
+  onLogout?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, currentUser, currentView, onNavigate }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentUser, currentView, onNavigate, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Sync Widget State
@@ -151,6 +153,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, currentView, onN
               <p className="text-[10px] text-slate-400 truncate capitalize font-medium">{currentUser.role.toLowerCase()}</p>
             </div>
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white border border-slate-700 hover:border-red-500 transition-all duration-200"
+            >
+              <LogOut size={16} />
+              <span className="text-sm font-medium">Sair</span>
+            </button>
+          )}
         </div>
       </aside>
 

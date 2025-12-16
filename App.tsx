@@ -16,10 +16,20 @@ import { api } from './services/dataService';
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
 
-  // Configuração do Timer de Sincronização Automática (3 horas)
+  // Carrega sessão salva ao iniciar
   useEffect(() => {
-    const SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 Horas
+    const savedSession = api.getCurrentSession();
+    if (savedSession) {
+      setCurrentUser(savedSession);
+    }
+    setIsLoadingSession(false);
+  }, []);
+
+  // Configuração do Timer de Sincronização Automática (30 minutos)
+  useEffect(() => {
+    const SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutos
 
     const timer = setInterval(() => {
       console.log(`[AutoSync] Iniciando sincronização automática programada (${new Date().toLocaleTimeString()})...`);
@@ -32,13 +42,21 @@ const App: React.FC = () => {
 
     // Tenta rodar uma vez ao montar o app para garantir dados frescos,
     // mas de forma silenciosa (sem bloquear UI)
-    api.triggerManualSync('AUTOMATICO').catch(() => console.warn("Sync inicial falhou (normal se offline)"));
+    if (currentUser) {
+      api.triggerManualSync('AUTOMATICO').catch(() => console.warn("Sync inicial falhou (normal se offline)"));
+    }
 
     return () => clearInterval(timer);
-  }, []);
+  }, [currentUser]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    setCurrentView('dashboard');
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setCurrentUser(null);
     setCurrentView('dashboard');
   };
 
@@ -67,6 +85,17 @@ const App: React.FC = () => {
     }
   };
 
+  if (isLoadingSession) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-crop-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -77,6 +106,7 @@ const App: React.FC = () => {
         currentUser={currentUser}
         currentView={currentView}
         onNavigate={setCurrentView}
+        onLogout={handleLogout}
       >
         {renderContent()}
       </Layout>

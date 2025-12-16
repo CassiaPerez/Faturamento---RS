@@ -17,7 +17,8 @@ const STORAGE_KEYS = {
   LOGS: 'cropflow_logs_v2',
   CONFIG: 'cropflow_config_v1',
   DELETED_IDS: 'cropflow_deleted_ids_v2',
-  USERS: 'cropflow_users_v1'
+  USERS: 'cropflow_users_v1',
+  CURRENT_SESSION: 'cropflow_current_session_v1'
 };
 
 const loadFromStorage = <T>(key: string, defaultData: T): T => {
@@ -64,7 +65,7 @@ let sessionEvents: HistoricoEvento[] = [];
 
 // MOCK USERS (Fallback Inicial)
 export const MOCK_USERS: User[] = [
-  { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: 'administrador@grupocropfield.com.br', password: '123' },
+  { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: 'administrador@grupocropfield.com.br', password: 'Cp261121@!' },
   { id: 'u2', name: 'Gerente Comercial', role: Role.GERENTE, email: 'gerente@cropflow.com', password: '123' },
   { id: 'u3', name: 'Analista Faturamento', role: Role.FATURAMENTO, email: 'faturamento@cropflow.com', password: '123' },
   { id: 'u6', name: 'Diretor Comercial', role: Role.COMERCIAL, email: 'comercial@cropflow.com', password: '123' },
@@ -587,7 +588,9 @@ export const api = {
   
   login: async (email: string, password: string): Promise<User> => {
       if (email.trim() === 'administrador@grupocropfield.com.br' && password === 'Cp261121@!') {
-        return { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: email };
+        const adminUser = { id: 'u1', name: 'Administrador', role: Role.ADMIN, email: email };
+        saveToStorage(STORAGE_KEYS.CURRENT_SESSION, adminUser);
+        return adminUser;
       }
       try {
         const { data, error } = await supabase.from('app_users').select('*').eq('email', email).eq('password', password).single();
@@ -597,12 +600,24 @@ export const api = {
             if (existingIdx !== -1) localUsers[existingIdx] = user;
             else localUsers.push(user);
             saveToStorage(STORAGE_KEYS.USERS, localUsers);
+            saveToStorage(STORAGE_KEYS.CURRENT_SESSION, user);
             return user;
         }
       } catch (e) {}
       const user = localUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (user && (!user.password || user.password === password)) return user;
+      if (user && (!user.password || user.password === password)) {
+        saveToStorage(STORAGE_KEYS.CURRENT_SESSION, user);
+        return user;
+      }
       throw new Error('Credenciais inválidas.');
+  },
+
+  getCurrentSession: (): User | null => {
+    return loadFromStorage<User | null>(STORAGE_KEYS.CURRENT_SESSION, null);
+  },
+
+  logout: () => {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION);
   },
   
   getSystemConfig: async () => { 
