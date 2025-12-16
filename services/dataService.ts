@@ -1409,15 +1409,27 @@ export const api = {
         const novosPedidos = parseCSV(csvText);
         if (novosPedidos.length === 0) throw new Error("Nenhum pedido válido encontrado.");
 
-        let added = 0; let updated = 0;
+        let added = 0; let updated = 0; let preserved = 0;
         const currentDeletedIds = loadFromStorage(STORAGE_KEYS.DELETED_IDS, []);
 
         novosPedidos.forEach(novo => {
             if (currentDeletedIds.includes(String(novo.id))) return;
+
             const existsIdx = localPedidos.findIndex(p => String(p.id) === String(novo.id));
+
             if (existsIdx !== -1) {
                 const existing = localPedidos[existsIdx];
-                // Mesclar itens mantendo volumes já consumidos
+
+                // PROTEÇÃO: Verifica se o pedido tem solicitações
+                const temSolicitacoes = localSolicitacoes.some(s => s.pedido_id === existing.id);
+
+                if (temSolicitacoes) {
+                    // PRESERVAR: Não atualiza pedidos com solicitações
+                    preserved++;
+                    return;
+                }
+
+                // MERGE: Apenas pedidos SEM solicitações são atualizados
                 const itensMesclados = novo.itens.map(novoItem => {
                     const itemExistente = existing.itens.find(ie => ie.nome_produto === novoItem.nome_produto);
                     if (itemExistente) {
@@ -1431,20 +1443,20 @@ export const api = {
                     return novoItem;
                 });
 
-                localPedidos[existsIdx] = { 
-                    ...novo, 
+                localPedidos[existsIdx] = {
+                    ...novo,
                     itens: itensMesclados,
                     status: existing.status !== StatusPedido.PENDENTE ? existing.status : novo.status,
                     volume_faturado: existing.volume_faturado,
                     valor_faturado: existing.valor_faturado,
-                    volume_restante: existing.volume_restante 
+                    volume_restante: existing.volume_restante
                 };
-                
-                // Recalcula totais globais do pedido baseados nos itens mesclados
+
                 localPedidos[existsIdx].volume_restante = itensMesclados.reduce((acc, i) => acc + i.volume_restante, 0);
-                
+
                 updated++;
             } else {
+                // NOVO: Adiciona pedidos que não existem
                 localPedidos.push(novo);
                 added++;
             }
@@ -1456,11 +1468,26 @@ export const api = {
           for (const pedido of novosPedidos) {
             if (currentDeletedIds.includes(String(pedido.id))) continue;
 
+            // Verifica se existe no Supabase
             const { data: existing } = await supabase
               .from('pedidos')
               .select('id')
               .eq('id', pedido.id)
               .maybeSingle();
+
+            // Verifica se tem solicitações no Supabase
+            const { data: solicitacoes } = await supabase
+              .from('solicitacoes')
+              .select('id')
+              .eq('pedido_id', pedido.id)
+              .limit(1);
+
+            const temSolicitacoesDB = solicitacoes && solicitacoes.length > 0;
+
+            // PROTEÇÃO: Não atualiza pedidos com solicitações
+            if (existing && temSolicitacoesDB) {
+              continue;
+            }
 
             const pedidoPayload = {
               id: pedido.id,
@@ -1494,7 +1521,7 @@ export const api = {
           console.warn("Erro ao sincronizar pedidos com Supabase", e);
         }
 
-        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: [`Add: ${added}`, `Upd: ${updated}`] };
+        const logEntry: LogSincronizacao = { id: `log-${Date.now()}`, data: new Date().toISOString(), tipo, arquivo: 'Google Drive Sync', sucesso: true, mensagens: [`Novos: ${added}`, `Atualizados: ${updated}`, `Preservados: ${preserved}`] };
         localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
 
         return { added, updated };
