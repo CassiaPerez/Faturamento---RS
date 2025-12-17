@@ -81,11 +81,11 @@ const getVendedorNomeByCodigo = (codigo: string): string => {
 const generateVendedoresFromJSON = () => {
   const vendedores: User[] = [];
   const emailMap: { [key: string]: string[] } = {
-    'DESESSARDS E VIEIRA REPRESENTACOES LTDA': ['desessards@cropflow.com'],
+    'DESESSARDS E VIEIRA REPRESENTACOES LTDA': ['diego.desessards@grupocropfield.com.br'],
     'EDUARDO FATTORE E CIA LTDA': ['eduardo@cropflow.com'],
     'DANIEL LORENZONI LTDA': ['daniel@cropflow.com'],
     'AGRO RUPPENTHAL SERVICOS DE INFORMATICA LTDA': ['maurel@cropflow.com'],
-    'A. J. DEBONI & CIA LTDA': ['deboni@cropflow.com'],
+    'A. J. DEBONI & CIA LTDA': ['alexandre.deboni@grupocropfield.com.br'],
     'GLOWACKI AGENCIAMENTOS DE INSUMOS AGRICOLAS LTDA': ['glowacki@cropflow.com'],
     'MARCIO BLANGER': ['marcio@cropflow.com'],
     'CROPFIELD DO BRASIL S.A.': ['matriz@cropflow.com'],
@@ -95,7 +95,7 @@ const generateVendedoresFromJSON = () => {
     'LARISSA WILKE TEIXEIRA': ['larissa@cropflow.com'],
     'FABIO DA ROCHA CORBELLINI EIRELI': ['fabio@cropflow.com'],
     'RONALDO ROSSLER RIBAS - ME': ['ronaldo@cropflow.com'],
-    'DANTE LUIS DAMIANI': ['dante@cropflow.com'],
+    'DANTE LUIS DAMIANI': ['dante.damiani@grupocropfield.com.br'],
     'ROBSON SUHRE DE CAMPOS': ['robson@cropflow.com'],
     'VALDECIR ALVES DE OLIVEIRA-ME': ['valdecir@cropflow.com'],
     'VEIT CONSULTORIA AGRICOLA EIRELI': ['andre.veit@cropflow.com'],
