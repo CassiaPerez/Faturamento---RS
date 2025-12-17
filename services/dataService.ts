@@ -721,15 +721,29 @@ export const api = {
     return { success: sent, message: sent ? "Comando enviado" : "Falha na conexão" };
   },
   
-  getUsers: async () => { 
+  getUsers: async () => {
+    console.log('[GET USERS] Carregando usuários do Supabase...');
     try {
-        const { data } = await supabase.from('app_users').select('*').order('name');
-        if (data) {
+        const { data, error } = await supabase.from('app_users').select('*').order('name');
+        if (error) {
+            console.error('[GET USERS] Erro ao buscar usuários:', error);
+        } else if (data) {
             localUsers = data as User[];
             saveToStorage(STORAGE_KEYS.USERS, localUsers);
+            console.log('[GET USERS] ✓ Usuários carregados:', localUsers.length);
+            console.log('[GET USERS] Usuários cadastrados:', localUsers.map(u => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                manager_id: u.manager_id
+            })));
         }
-    } catch (e) {}
-    return localUsers; 
+    } catch (e) {
+        console.error('[GET USERS] Exceção ao carregar usuários:', e);
+    }
+    console.log('[GET USERS] Retornando', localUsers.length, 'usuários');
+    return localUsers;
   },
 
   createUser: async (user: any) => { 
@@ -1056,21 +1070,65 @@ export const api = {
        updatedSol.blocked_by = blockedByRole;
        
        // --- DISPARO DE EMAIL PARA O VENDEDOR E GERENTE ---
+       console.log('[EMAIL BLOQUEIO] Iniciando envio para pedido:', updatedSol.numero_pedido);
+       console.log('[EMAIL BLOQUEIO] Buscando vendedor:', updatedSol.criado_por);
+       console.log('[EMAIL BLOQUEIO] Total de usuários cadastrados:', localUsers.length);
+
        const creatorUser = localUsers.find(u => u.name === updatedSol.criado_por);
+
+       if (!creatorUser) {
+           console.error('[EMAIL BLOQUEIO] ❌ Vendedor não encontrado:', updatedSol.criado_por);
+           console.error('[EMAIL BLOQUEIO] Usuários disponíveis:', localUsers.map(u => u.name).join(', '));
+       } else {
+           console.log('[EMAIL BLOQUEIO] ✓ Vendedor encontrado:', {
+               name: creatorUser.name,
+               email: creatorUser.email,
+               role: creatorUser.role,
+               manager_id: creatorUser.manager_id
+           });
+       }
+
        let managerUser: User | undefined;
 
        if (creatorUser) {
            // Busca o Gerente se houver vínculo
            if (creatorUser.manager_id) {
+               console.log('[EMAIL BLOQUEIO] Buscando gerente com ID:', creatorUser.manager_id);
                managerUser = localUsers.find(u => u.id === creatorUser.manager_id);
+
+               if (!managerUser) {
+                   console.warn('[EMAIL BLOQUEIO] ⚠️ Gerente não encontrado com ID:', creatorUser.manager_id);
+                   console.warn('[EMAIL BLOQUEIO] IDs de usuários disponíveis:', localUsers.map(u => u.id).join(', '));
+               } else {
+                   console.log('[EMAIL BLOQUEIO] ✓ Gerente encontrado:', {
+                       name: managerUser.name,
+                       email: managerUser.email,
+                       role: managerUser.role
+                   });
+               }
+           } else {
+               console.warn('[EMAIL BLOQUEIO] ⚠️ Vendedor não possui gerente cadastrado (manager_id vazio)');
            }
 
-           const recipients = [creatorUser.email];
+           const recipients = [];
+
+           if (creatorUser.email) {
+               recipients.push(creatorUser.email);
+               console.log('[EMAIL BLOQUEIO] ✓ Adicionado vendedor:', creatorUser.email);
+           } else {
+               console.error('[EMAIL BLOQUEIO] ❌ Vendedor sem e-mail cadastrado:', creatorUser.name);
+           }
+
            if (managerUser && managerUser.email) {
                recipients.push(managerUser.email);
+               console.log('[EMAIL BLOQUEIO] ✓ Adicionado gerente:', managerUser.email);
+           } else if (managerUser) {
+               console.error('[EMAIL BLOQUEIO] ❌ Gerente sem e-mail cadastrado:', managerUser.name);
            }
 
-           if (recipients.length > 0 && recipients[0]) {
+           if (recipients.length > 0) {
+               console.log('[EMAIL BLOQUEIO] 📧 Enviando para:', recipients.join(', '));
+
                const dataBloqueio = new Date().toLocaleString('pt-BR', {
                    day: '2-digit',
                    month: '2-digit',
@@ -1099,7 +1157,13 @@ export const api = {
                    body: htmlContent,
                    html: htmlContent,
                    action: 'notification'
-               }).catch(err => console.error("Falha ao enviar email de bloqueio", err));
+               }).then(() => {
+                   console.log('[EMAIL BLOQUEIO] ✓ E-mail enviado com sucesso!');
+               }).catch(err => {
+                   console.error('[EMAIL BLOQUEIO] ❌ Falha ao enviar email:', err);
+               });
+           } else {
+               console.error('[EMAIL BLOQUEIO] ❌ Nenhum destinatário válido encontrado');
            }
        }
     }
@@ -1417,14 +1481,54 @@ export const api = {
         localSolicitacoes.push(novaRejeitada);
         
         // --- ENVIO DE E-MAIL DA REJEIÇÃO PARCIAL ---
+        console.log('[EMAIL PARCIAL] Iniciando envio para pedido:', sol.numero_pedido);
+        console.log('[EMAIL PARCIAL] Buscando vendedor:', sol.criado_por);
+
         const creatorUser = localUsers.find(u => u.name === sol.criado_por);
+
+        if (!creatorUser) {
+            console.error('[EMAIL PARCIAL] ❌ Vendedor não encontrado:', sol.criado_por);
+            console.error('[EMAIL PARCIAL] Usuários disponíveis:', localUsers.map(u => u.name).join(', '));
+        } else {
+            console.log('[EMAIL PARCIAL] ✓ Vendedor encontrado:', {
+                name: creatorUser.name,
+                email: creatorUser.email,
+                manager_id: creatorUser.manager_id
+            });
+        }
+
         let managerUser: User | undefined;
         if (creatorUser) {
-            if (creatorUser.manager_id) managerUser = localUsers.find(u => u.id === creatorUser.manager_id);
-            const recipients = [creatorUser.email];
-            if (managerUser && managerUser.email) recipients.push(managerUser.email);
+            if (creatorUser.manager_id) {
+                console.log('[EMAIL PARCIAL] Buscando gerente com ID:', creatorUser.manager_id);
+                managerUser = localUsers.find(u => u.id === creatorUser.manager_id);
 
-            if (recipients.length > 0 && recipients[0]) {
+                if (!managerUser) {
+                    console.warn('[EMAIL PARCIAL] ⚠️ Gerente não encontrado com ID:', creatorUser.manager_id);
+                } else {
+                    console.log('[EMAIL PARCIAL] ✓ Gerente encontrado:', managerUser.name, managerUser.email);
+                }
+            } else {
+                console.warn('[EMAIL PARCIAL] ⚠️ Vendedor não possui gerente cadastrado');
+            }
+
+            const recipients = [];
+
+            if (creatorUser.email) {
+                recipients.push(creatorUser.email);
+                console.log('[EMAIL PARCIAL] ✓ Adicionado vendedor:', creatorUser.email);
+            } else {
+                console.error('[EMAIL PARCIAL] ❌ Vendedor sem e-mail cadastrado:', creatorUser.name);
+            }
+
+            if (managerUser && managerUser.email) {
+                recipients.push(managerUser.email);
+                console.log('[EMAIL PARCIAL] ✓ Adicionado gerente:', managerUser.email);
+            }
+
+            if (recipients.length > 0) {
+               console.log('[EMAIL PARCIAL] 📧 Enviando para:', recipients.join(', '));
+
                const dataBloqueio = new Date().toLocaleString('pt-BR', {
                    day: '2-digit',
                    month: '2-digit',
@@ -1454,7 +1558,13 @@ export const api = {
                    body: htmlContent,
                    html: htmlContent,
                    action: 'notification'
-               }).catch(err => console.error("Falha ao enviar email de bloqueio parcial", err));
+               }).then(() => {
+                   console.log('[EMAIL PARCIAL] ✓ E-mail enviado com sucesso!');
+               }).catch(err => {
+                   console.error('[EMAIL PARCIAL] ❌ Falha ao enviar email:', err);
+               });
+            } else {
+                console.error('[EMAIL PARCIAL] ❌ Nenhum destinatário válido encontrado');
             }
         }
         
