@@ -40,8 +40,7 @@ const saveToStorage = (key: string, data: any) => {
   }
 };
 
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuZcOvracR6by--ZRCbv0AT7w3owYuTdgUn2G2V1sJzxD_X_RBF8GIyVzcwwza9TbD/exec';
-
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuZcOvracR6by--ZRCbv0AT7w3owYuTdgUn2G2V1sJzxD_X_RBF8GIyVzcwwza9TbD/exe';
 // Carrega URL salva ou usa padrão
 const loadConfig = () => {
   const saved = loadFromStorage(STORAGE_KEYS.CONFIG, { 
