@@ -118,6 +118,8 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
   const handleConfirmApproval = async () => {
     if (!approveId) return;
 
+    console.log('[COMERCIAL] Iniciando aprovação:', approveId);
+
     // Separa aprovados e rejeitados
     const aprovados = approvalItems.filter(i => i.selected).map(i => ({
         nome_produto: i.nome_produto,
@@ -132,23 +134,30 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
         obs: i.rejectObs || 'Rejeitado pelo comercial sem observação específica.'
     }));
 
+    console.log('[COMERCIAL] Aprovados:', aprovados.length, 'Rejeitados:', rejeitados.length);
+
     // Validação: Se rejeitou item, precisa ter obs? (Opcional, mas boa prática)
     // Se não selecionou nada, é rejeição total (melhor usar botão de rejeição global, mas vamos suportar aqui)
     if (aprovados.length === 0 && rejeitados.length > 0) {
         if (!confirm("Todos os itens foram desmarcados. Isso rejeitará a solicitação inteira. Continuar?")) return;
         // Chama fluxo de rejeição global usando a primeira obs
+        console.log('[COMERCIAL] Rejeição total');
         await api.updateSolicitacaoStatus(approveId, StatusSolicitacao.REJEITADO, user, rejeitados[0].obs, user.role);
     } else {
         // Fluxo normal ou parcial
+        console.log('[COMERCIAL] Aprovação (normal ou parcial)');
         await api.approveSolicitacaoStep(approveId, user.role, user, approvalObservation, aprovados, rejeitados);
     }
-    
+
     // Atualiza localmente (Simplificado, reload ideal seria via fetch novamente)
+    console.log('[COMERCIAL] Recarregando solicitações...');
     const updatedData = await api.getSolicitacoes(user);
+    console.log('[COMERCIAL] Solicitações recarregadas:', updatedData.length);
     setSolicitacoes(updatedData);
-    
+
     setIsApproveModalOpen(false);
     setApproveId(null);
+    console.log('[COMERCIAL] Aprovação concluída');
   };
 
   const openRejectModal = (id: string) => {
@@ -189,10 +198,13 @@ const CommercialPanel: React.FC<{ user: User }> = ({ user }) => {
 
   // Lógica Paralela: Mostra tudo que está em análise e que EU ainda não aprovei.
   // Não importa se o crédito já aprovou ou não.
-  const pendingList = solicitacoes.filter(s =>
-    (s.status === StatusSolicitacao.EM_ANALISE)
-    && !s.aprovacao_comercial
-  );
+  const pendingList = solicitacoes.filter(s => {
+    const isPending = (s.status === StatusSolicitacao.EM_ANALISE) && !s.aprovacao_comercial;
+    if (s.status === StatusSolicitacao.EM_ANALISE) {
+      console.log('[COMERCIAL FILTER]', s.numero_pedido, 'Status:', s.status, 'Aprovação Comercial:', s.aprovacao_comercial, 'Na lista pendente?', isPending);
+    }
+    return isPending;
+  });
 
   const rejectedList = solicitacoes.filter(s => s.status === StatusSolicitacao.REJEITADO);
   const historyList = solicitacoes.filter(s => s.status === StatusSolicitacao.FATURADO);

@@ -862,9 +862,11 @@ export const api = {
   },
 
   getSolicitacoes: async (user: User): Promise<SolicitacaoFaturamento[]> => {
+    console.log('[GET SOLICITAÇÕES] Iniciando busca para usuário:', user.name, user.role);
     try {
       const { data, error } = await supabase.from('solicitacoes').select('*').order('created_at', { ascending: false });
       if (!error && data) {
+        console.log('[GET SOLICITAÇÕES] Dados recebidos do Supabase:', data.length, 'registros');
         localSolicitacoes = data.map(s => {
           const nomeVendedor = s.codigo_vendedor ? getVendedorNomeByCodigo(s.codigo_vendedor) : '';
           return {
@@ -903,6 +905,15 @@ export const api = {
     const solicitacoes = user.role === Role.VENDEDOR
         ? solicitacoesAtualizadas.filter(s => s.criado_por === user.name)
         : solicitacoesAtualizadas;
+
+    console.log('[GET SOLICITAÇÕES] Retornando', solicitacoes.length, 'solicitações para', user.role);
+    console.log('[GET SOLICITAÇÕES] Status das solicitações:', solicitacoes.map(s => ({
+      id: s.id.substring(0, 8),
+      status: s.status,
+      aprovacao_comercial: s.aprovacao_comercial,
+      aprovacao_credito: s.aprovacao_credito
+    })));
+
     return solicitacoes;
   },
 
@@ -1321,19 +1332,39 @@ export const api = {
   },
 
   approveSolicitacaoStep: async (
-    id: string, 
-    role: Role, 
-    user: User, 
+    id: string,
+    role: Role,
+    user: User,
     obs?: string,
     itensAprovados?: { nome_produto: string, volume: number, unidade: string }[],
     itensRejeitados?: { nome_produto: string, volume: number, unidade: string, obs: string }[]
   ) => {
+    console.log('[APROVAÇÃO STEP] Iniciando:', { id, role, obs, aprovados: itensAprovados?.length, rejeitados: itensRejeitados?.length });
     const sol = localSolicitacoes.find(s => s.id === id);
-    if (!sol) return;
+    if (!sol) {
+      console.error('[APROVAÇÃO STEP] Solicitação não encontrada:', id);
+      return;
+    }
+
+    console.log('[APROVAÇÃO STEP] Solicitação encontrada:', {
+      status: sol.status,
+      aprovacao_comercial: sol.aprovacao_comercial,
+      aprovacao_credito: sol.aprovacao_credito
+    });
 
     const updates: any = {};
-    if (role === Role.COMERCIAL) { updates.aprovacao_comercial = true; updates.obs_comercial = obs; }
-    if (role === Role.CREDITO) { updates.aprovacao_credito = true; updates.obs_credito = obs; }
+    if (role === Role.COMERCIAL || role === Role.ANALISTA_COMERCIAL) {
+      updates.aprovacao_comercial = true;
+      updates.obs_comercial = obs;
+      console.log('[APROVAÇÃO STEP] Aprovação COMERCIAL aplicada');
+    }
+    if (role === Role.CREDITO) {
+      updates.aprovacao_credito = true;
+      updates.obs_credito = obs;
+      console.log('[APROVAÇÃO STEP] Aprovação CRÉDITO aplicada');
+    }
+
+    console.log('[APROVAÇÃO STEP] Updates aplicados:', updates);
 
     const index = localSolicitacoes.findIndex(s => s.id === id);
     let updatedSol = { ...localSolicitacoes[index], ...updates };
@@ -1475,16 +1506,29 @@ export const api = {
     }
 
     localSolicitacoes[index] = updatedSol;
-    
+
+    console.log('[APROVAÇÃO STEP] Solicitação atualizada:', {
+      aprovacao_comercial: updatedSol.aprovacao_comercial,
+      aprovacao_credito: updatedSol.aprovacao_credito,
+      status_antes: updatedSol.status
+    });
+
     // Verifica aprovação total
     if (updatedSol.aprovacao_comercial && updatedSol.aprovacao_credito) {
+        console.log('[APROVAÇÃO STEP] AMBAS APROVAÇÕES OK - Mudando status para APROVADO_PARA_FATURAMENTO');
         updatedSol.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
         updates.status = StatusSolicitacao.APROVADO_PARA_FATURAMENTO;
         await logEvento(sol.pedido_id, user, 'Aprovado para Faturamento', `Aprovação conjunta OK${obs ? ` | ${obs}` : ''}`, 'SUCESSO');
     } else {
+        console.log('[APROVAÇÃO STEP] Aprovação parcial:', {
+          comercial: updatedSol.aprovacao_comercial ? 'SIM' : 'NÃO',
+          credito: updatedSol.aprovacao_credito ? 'SIM' : 'NÃO'
+        });
         await logEvento(sol.pedido_id, user, `Aprovação Parcial (${role})`, obs, 'INFO');
     }
-    
+
+    console.log('[APROVAÇÃO STEP] Status final:', updatedSol.status);
+
     saveToStorage(STORAGE_KEYS.SOLICITACOES, localSolicitacoes);
     try {
         const payload = {
