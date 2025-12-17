@@ -40,7 +40,7 @@ const saveToStorage = (key: string, data: any) => {
   }
 };
 
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuZcOvracR6by--ZRCbv0AT7w3owYuTdgUn2G2V1sJzxD_X_RBF8GIyVzcwwza9TbD/exe';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRo-UD20w_MVIA0oN4iEkDyKK3zFCvOznZRYajLBvGqSRV1i4L37xq65ICKxVqT1eG/exec';
 // Carrega URL salva ou usa padrão
 const loadConfig = () => {
   const saved = loadFromStorage(STORAGE_KEYS.CONFIG, { 
@@ -430,16 +430,25 @@ const generateBlockEmailTemplate = (data: {
 };
 
 const sendEmailToScript = async (payload: any) => {
-    if (!navigator.onLine) return false;
+    if (!navigator.onLine) {
+        console.warn('[EMAIL] Sem conexão com a internet');
+        return false;
+    }
     try {
-        await fetch(googleScriptUrl, { 
-            method: 'POST', 
-            mode: 'no-cors', 
+        console.log('[EMAIL] Enviando para:', googleScriptUrl);
+        console.log('[EMAIL] Payload:', { to: payload.to, subject: payload.subject, action: payload.action });
+
+        const response = await fetch(googleScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload) 
+            body: JSON.stringify(payload)
         });
+
+        console.log('[EMAIL] Resposta recebida (no-cors mode)');
         return true;
     } catch (e) {
+        console.error('[EMAIL] Erro ao enviar:', e);
         return false;
     }
 };

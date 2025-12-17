@@ -39,6 +39,13 @@ const SettingsPage: React.FC<{ user: User }> = ({ user }) => {
     setIsLoading(false);
   };
 
+  const handleResetEmailUrl = () => {
+    const newUrl = 'https://script.google.com/macros/s/AKfycbzRo-UD20w_MVIA0oN4iEkDyKK3zFCvOznZRYajLBvGqSRV1i4L37xq65ICKxVqT1eG/exec';
+    setConfig({ ...config, emailServiceUrl: newUrl });
+    setSaveMessage('URL resetada! Clique em "Salvar Configuração" para aplicar.');
+    setTimeout(() => setSaveMessage(''), 5000);
+  };
+
   const handleTestEmail = async () => {
     setTestEmailStatus('sending');
     const result = await api.sendTestEmail(user.email);
@@ -174,9 +181,18 @@ const SettingsPage: React.FC<{ user: User }> = ({ user }) => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Webhook URL (Google Script)</label>
-            <input 
-              type="text" 
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-500 uppercase">Webhook URL (Google Script)</label>
+              <button
+                onClick={handleResetEmailUrl}
+                className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors"
+                type="button"
+              >
+                Resetar para Nova URL
+              </button>
+            </div>
+            <input
+              type="text"
               value={config.emailServiceUrl}
               onChange={(e) => setConfig({...config, emailServiceUrl: e.target.value})}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-crop-500 focus:border-transparent outline-none transition-all text-slate-700"
