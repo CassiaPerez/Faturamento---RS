@@ -506,6 +506,7 @@ const parseCSV = (csvText: string): Pedido[] => {
     const idxCodVendedor = getIdx(['cod_vendedor', 'codigo_vendedor', 'cod_vend', 'cod.vend', 'cd_vend', 'vendedor_id']);
 
     // Logs de diagnóstico
+    console.log('[CSV PARSER] ==> HEADERS:', headers);
     console.log('[CSV PARSER] Colunas detectadas:');
     console.log('[CSV PARSER] - Código Cliente:', idxCodigoCliente >= 0 ? `✅ Coluna ${idxCodigoCliente} (${headers[idxCodigoCliente]})` : '❌ NÃO ENCONTRADO');
     console.log('[CSV PARSER] - Nome Cliente:', idxCliente >= 0 ? `Coluna ${idxCliente} (${headers[idxCliente]})` : 'Não encontrado');
@@ -533,6 +534,11 @@ const parseCSV = (csvText: string): Pedido[] => {
         if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
 
         const numeroPedido = String(rawNumero).trim().replace(/\s/g, '');
+
+        // Log detalhado das primeiras 3 linhas para debug
+        if (i <= headerIndex + 3) {
+            console.log(`[CSV PARSER] Linha ${i}: Pedido=${numeroPedido}, Cliente=${cliente}, CodCliente="${codigoCliente}"`);
+        }
 
         // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
         let produto = 'Produto Geral';
