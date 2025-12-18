@@ -494,7 +494,7 @@ const parseCSV = (csvText: string): Pedido[] => {
     // MAPA DE COLUNAS - ATUALIZADO PARA NOVO FORMATO CSV
     const idxNumero = getIdx(['nro_pedido', 'numero_pedido', 'numero', 'pedido', 'nro', 'doc', 'ordem', 'nr_pedido']);
     const idxCliente = getIdx(['nome_pessoa', 'cliente', 'nome', 'parceiro']);
-    const idxCodigoCliente = getIdx(['cod_pessoa', 'codigo_cliente', 'cod_cliente', 'codigo_parceiro', 'cod_parceiro', 'cliente_id', 'id_cliente']);
+    const idxCodigoCliente = getIdx(['cod_pessoa_filial', 'cod_pessoa', 'codigo_cliente', 'cod_cliente', 'codigo_parceiro', 'cod_parceiro', 'cliente_id', 'id_cliente']);
 
     // Priorizar 'descricao' do novo formato
     const idxProduto = getIdx(['descricao', 'descrição', 'produto', 'material', 'especificacao', 'mercadoria', 'texto']);

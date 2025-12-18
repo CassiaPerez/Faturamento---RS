@@ -429,7 +429,10 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
                             {renderStatusBadge(p)}
                         </div>
                         <h3 className="text-lg font-bold text-slate-900 truncate">{p.nome_cliente}</h3>
-                        <div className="mt-2 text-xs flex items-center gap-2 text-slate-500">
+                        <div className="text-xs text-slate-500 font-medium mt-1">
+                            Código: <span className="font-mono font-bold text-slate-700">{p.codigo_cliente}</span>
+                        </div>
+                        <div className="mt-1 text-xs flex items-center gap-2 text-slate-500">
                             <UserIcon size={12} /> {p.codigo_vendedor} - {p.nome_vendedor}
                         </div>
                     </div>
