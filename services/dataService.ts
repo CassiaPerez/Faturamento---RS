@@ -507,9 +507,9 @@ const parseCSV = (csvText: string): Pedido[] => {
 
     // Logs de diagnóstico
     console.log('[CSV PARSER] Colunas detectadas:');
-    console.log('[CSV PARSER] - Código Cliente:', idxCodigoCliente >= 0 ? `Coluna ${idxCodigoCliente} (${headers[idxCodigoCliente]})` : '❌ NÃO ENCONTRADO');
-    console.log('[CSV PARSER] - Nome Cliente:', idxCliente >= 0 ? `Coluna ${idxCliente}` : 'Não encontrado');
-    console.log('[CSV PARSER] - Número Pedido:', idxNumero >= 0 ? `Coluna ${idxNumero}` : 'Não encontrado');
+    console.log('[CSV PARSER] - Código Cliente:', idxCodigoCliente >= 0 ? `✅ Coluna ${idxCodigoCliente} (${headers[idxCodigoCliente]})` : '❌ NÃO ENCONTRADO');
+    console.log('[CSV PARSER] - Nome Cliente:', idxCliente >= 0 ? `Coluna ${idxCliente} (${headers[idxCliente]})` : 'Não encontrado');
+    console.log('[CSV PARSER] - Número Pedido:', idxNumero >= 0 ? `Coluna ${idxNumero} (${headers[idxNumero]})` : 'Não encontrado');
 
     // Map para agrupar itens pelo número do pedido
     const pedidosMap = new Map<string, Pedido>();
@@ -579,7 +579,12 @@ const parseCSV = (csvText: string): Pedido[] => {
         // Se o pedido já existe, adiciona item. Se não, cria.
         if (pedidosMap.has(numeroPedido)) {
             const existingPedido = pedidosMap.get(numeroPedido)!;
-            
+
+            // Atualiza código do cliente se não tiver ou se vier vazio
+            if (codigoCliente && (!existingPedido.codigo_cliente || existingPedido.codigo_cliente === 'SEM_CODIGO')) {
+                existingPedido.codigo_cliente = codigoCliente;
+            }
+
             // Adiciona novo item
             existingPedido.itens.push({
                 id: `${numeroPedido}-${existingPedido.itens.length + 1}`,
@@ -596,7 +601,7 @@ const parseCSV = (csvText: string): Pedido[] => {
             existingPedido.volume_total += volume;
             existingPedido.volume_restante += volume;
             existingPedido.valor_total += valor;
-            
+
             // Atualiza resumo de produtos se for diferente
             if (!existingPedido.nome_produto.includes('Mix') && existingPedido.nome_produto !== produto) {
                 existingPedido.nome_produto = "Mix de Produtos";
