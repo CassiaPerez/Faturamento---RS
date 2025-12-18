@@ -685,6 +685,143 @@ const parseCSV = (csvText: string): Pedido[] => {
     return pedidos;
 };
 
+// Converte link do Google Drive para download direto
+const convertGoogleDriveUrl = (url: string): string => {
+    // Se já for um link de download direto, retorna como está
+    if (url.includes('drive.google.com/uc?')) return url;
+
+    // Extrai o ID do arquivo de diferentes formatos de URL
+    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+        const fileId = fileIdMatch[1];
+        return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    }
+
+    // Se não conseguir converter, retorna o original
+    return url;
+};
+
+// Sincroniza pedidos do Google Drive
+const syncFromGoogleDrive = async (): Promise<{ success: boolean; pedidosCount: number; message: string }> => {
+    try {
+        console.log('[GOOGLE DRIVE SYNC] Iniciando sincronização...');
+
+        // Carrega configuração
+        const config = loadConfig();
+        const csvUrl = config.csvUrl;
+
+        if (!csvUrl) {
+            throw new Error('URL do Google Drive não configurada');
+        }
+
+        // Converte para link de download direto
+        const downloadUrl = convertGoogleDriveUrl(csvUrl);
+        console.log('[GOOGLE DRIVE SYNC] Buscando arquivo:', downloadUrl);
+
+        // Busca o arquivo
+        const response = await fetch(downloadUrl);
+
+        if (!response.ok) {
+            throw new Error(`Erro ao buscar arquivo: ${response.status} ${response.statusText}`);
+        }
+
+        const csvText = await response.text();
+        console.log('[GOOGLE DRIVE SYNC] Arquivo baixado, tamanho:', csvText.length, 'bytes');
+
+        // Parse do CSV
+        const pedidos = parseCSV(csvText);
+        console.log('[GOOGLE DRIVE SYNC] Pedidos parseados:', pedidos.length);
+
+        if (pedidos.length === 0) {
+            throw new Error('Nenhum pedido encontrado no arquivo');
+        }
+
+        // Salva pedidos no storage local
+        saveToStorage(STORAGE_KEYS.PEDIDOS, pedidos);
+        localPedidos.length = 0;
+        localPedidos.push(...pedidos);
+
+        // Tenta salvar no Supabase
+        try {
+            // Remove pedidos antigos
+            await supabase.from('pedidos').delete().neq('id', '');
+
+            // Insere novos pedidos
+            const pedidosToInsert = pedidos.map(p => ({
+                id: p.id,
+                numero_pedido: p.numero_pedido,
+                codigo_cliente: p.codigo_cliente || 'SEM_CODIGO',
+                nome_cliente: p.nome_cliente,
+                nome_produto: p.nome_produto,
+                unidade: p.unidade,
+                volume_total: p.volume_total,
+                volume_restante: p.volume_restante,
+                volume_faturado: p.volume_faturado,
+                valor_total: p.valor_total,
+                valor_faturado: p.valor_faturado,
+                codigo_vendedor: p.codigo_vendedor,
+                nome_vendedor: p.nome_vendedor,
+                status: p.status,
+                data_criacao: p.data_criacao,
+                itens: p.itens
+            }));
+
+            const { error } = await supabase.from('pedidos').insert(pedidosToInsert);
+
+            if (error) {
+                console.error('[GOOGLE DRIVE SYNC] Erro ao salvar no Supabase:', error);
+            } else {
+                console.log('[GOOGLE DRIVE SYNC] Pedidos salvos no Supabase com sucesso');
+            }
+        } catch (dbError) {
+            console.error('[GOOGLE DRIVE SYNC] Erro ao acessar banco de dados:', dbError);
+            // Continua mesmo com erro no banco, pois já salvou no localStorage
+        }
+
+        // Registra log de sincronização
+        const logSync: LogSincronizacao = {
+            id: `sync-${Date.now()}`,
+            data: new Date().toISOString(),
+            tipo: 'AUTOMATICO',
+            arquivo: 'Google Drive - Sincronização Automática',
+            sucesso: true,
+            mensagens: [`Importados ${pedidos.length} pedidos do Google Drive`]
+        };
+
+        localLogs.unshift(logSync);
+        saveToStorage(STORAGE_KEYS.LOGS, localLogs);
+
+        console.log('[GOOGLE DRIVE SYNC] Sincronização concluída com sucesso');
+        return {
+            success: true,
+            pedidosCount: pedidos.length,
+            message: `Sincronização concluída: ${pedidos.length} pedidos importados`
+        };
+
+    } catch (error) {
+        console.error('[GOOGLE DRIVE SYNC] Erro na sincronização:', error);
+
+        // Registra log de erro
+        const logSync: LogSincronizacao = {
+            id: `sync-${Date.now()}`,
+            data: new Date().toISOString(),
+            tipo: 'MANUAL',
+            arquivo: 'Google Drive - Sincronização Manual',
+            sucesso: false,
+            mensagens: [error instanceof Error ? error.message : 'Erro desconhecido']
+        };
+
+        localLogs.unshift(logSync);
+        saveToStorage(STORAGE_KEYS.LOGS, localLogs);
+
+        return {
+            success: false,
+            pedidosCount: 0,
+            message: error instanceof Error ? error.message : 'Erro desconhecido'
+        };
+    }
+};
+
 export const api = {
   checkConnection: async (): Promise<boolean> => {
     try {
@@ -1959,5 +2096,10 @@ export const api = {
         localLogs.unshift(logEntry); saveToStorage(STORAGE_KEYS.LOGS, localLogs);
         throw e;
     }
+  },
+
+  // Sincronização automática com Google Drive
+  syncFromGoogleDrive: async () => {
+    return await syncFromGoogleDrive();
   }
 };

@@ -40,8 +40,20 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedSolicitacao, setSelectedSolicitacao] = useState<SolicitacaoFaturamento | null>(null);
 
+  // Estado para sincronização com Google Drive
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     loadData();
+
+    // Sincronização automática a cada 3 horas
+    const syncInterval = setInterval(async () => {
+      console.log('[AUTO SYNC] Sincronizando com Google Drive...');
+      await handleGoogleDriveSync(true);
+    }, 3 * 60 * 60 * 1000); // 3 horas
+
+    return () => clearInterval(syncInterval);
   }, [user]);
 
   const loadData = async () => {
@@ -51,6 +63,47 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
       ]);
       setPedidos(pedidosData);
       setAllSolicitacoes(solicitacoesData);
+  };
+
+  const handleGoogleDriveSync = async (isAutoSync = false) => {
+    if (isSyncing) return;
+
+    setIsSyncing(true);
+    setSyncMessage(null);
+
+    try {
+      const result = await api.syncFromGoogleDrive();
+
+      if (result.success) {
+        setSyncMessage({
+          type: 'success',
+          text: isAutoSync
+            ? `[Auto] ${result.message}`
+            : result.message
+        });
+
+        // Recarrega dados após sincronização
+        await loadData();
+      } else {
+        setSyncMessage({
+          type: 'error',
+          text: result.message
+        });
+      }
+
+      // Remove mensagem após 5 segundos
+      setTimeout(() => setSyncMessage(null), 5000);
+
+    } catch (error) {
+      setSyncMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Erro ao sincronizar'
+      });
+
+      setTimeout(() => setSyncMessage(null), 5000);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -302,6 +355,15 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
           
           {activeTab === 'orders' && (
             <div className="flex flex-row gap-3 w-full md:w-auto">
+                <button
+                  onClick={() => handleGoogleDriveSync(false)}
+                  disabled={isSyncing}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 border rounded-xl font-bold transition-all shadow-sm ${isSyncing ? 'bg-slate-50 border-slate-300 text-slate-400 cursor-wait' : 'bg-white border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'}`}
+                  title="Sincronizar com Google Drive"
+                >
+                  <RefreshCcw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                  <span className="hidden md:inline">Sincronizar</span>
+                </button>
                 <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 border rounded-xl font-bold transition-all shadow-sm ${showAdvancedFilters ? 'bg-crop-50 border-crop-200 text-crop-700 ring-2 ring-crop-100' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
                 <SlidersHorizontal size={18} />
                 <span>Filtros</span>
@@ -313,6 +375,18 @@ const OrderList: React.FC<{ user: User }> = ({ user }) => {
             </div>
           )}
         </div>
+
+        {/* Mensagem de Sincronização */}
+        {syncMessage && (
+          <div className={`p-4 rounded-xl border-2 flex items-center gap-3 animate-in slide-in-from-top-2 duration-200 ${syncMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+            {syncMessage.type === 'success' ? (
+              <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+            ) : (
+              <AlertTriangle size={20} className="text-red-600 flex-shrink-0" />
+            )}
+            <span className="text-sm font-medium">{syncMessage.text}</span>
+          </div>
+        )}
 
         {activeTab === 'orders' && showAdvancedFilters && (
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-lg animate-in slide-in-from-top-2 duration-200">
