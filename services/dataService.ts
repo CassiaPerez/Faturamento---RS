@@ -494,6 +494,7 @@ const parseCSV = (csvText: string): Pedido[] => {
     // MAPA DE COLUNAS - ATUALIZADO PARA NOVO FORMATO CSV
     const idxNumero = getIdx(['nro_pedido', 'numero_pedido', 'numero', 'pedido', 'nro', 'doc', 'ordem', 'nr_pedido']);
     const idxCliente = getIdx(['nome_pessoa', 'cliente', 'nome', 'parceiro']);
+    const idxCodigoCliente = getIdx(['cod_pessoa', 'codigo_cliente', 'cod_cliente', 'codigo_parceiro', 'cod_parceiro', 'cliente_id', 'id_cliente']);
 
     // Priorizar 'descricao' do novo formato
     const idxProduto = getIdx(['descricao', 'descrição', 'produto', 'material', 'especificacao', 'mercadoria', 'texto']);
@@ -503,7 +504,13 @@ const parseCSV = (csvText: string): Pedido[] => {
     const idxValor = getIdx(['valor_liquido', 'liquido', 'valor', 'total', 'montante', 'bruto']);
     const idxVendedor = getIdx(['vendedor', 'rep', 'representante']);
     const idxCodVendedor = getIdx(['cod_vendedor', 'codigo_vendedor', 'cod_vend', 'cod.vend', 'cd_vend', 'vendedor_id']);
-    
+
+    // Logs de diagnóstico
+    console.log('[CSV PARSER] Colunas detectadas:');
+    console.log('[CSV PARSER] - Código Cliente:', idxCodigoCliente >= 0 ? `Coluna ${idxCodigoCliente} (${headers[idxCodigoCliente]})` : '❌ NÃO ENCONTRADO');
+    console.log('[CSV PARSER] - Nome Cliente:', idxCliente >= 0 ? `Coluna ${idxCliente}` : 'Não encontrado');
+    console.log('[CSV PARSER] - Número Pedido:', idxNumero >= 0 ? `Coluna ${idxNumero}` : 'Não encontrado');
+
     // Map para agrupar itens pelo número do pedido
     const pedidosMap = new Map<string, Pedido>();
 
@@ -520,10 +527,11 @@ const parseCSV = (csvText: string): Pedido[] => {
 
         const rawNumero = idxNumero >= 0 ? cols[idxNumero] : cols[0];
         const cliente = idxCliente >= 0 ? cols[idxCliente] : cols[1];
-        
+        const codigoCliente = idxCodigoCliente >= 0 && cols[idxCodigoCliente] ? cols[idxCodigoCliente].trim() : '';
+
         const ignoreTerms = ['total', 'página', 'relatório', 'impresso', 'emitido'];
         if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
-        
+
         const numeroPedido = String(rawNumero).trim().replace(/\s/g, '');
 
         // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
@@ -599,7 +607,7 @@ const parseCSV = (csvText: string): Pedido[] => {
             const novoPedido: Pedido = {
                 id: numeroPedido,
                 numero_pedido: numeroPedido,
-                codigo_cliente: 'C' + Math.floor(Math.random() * 1000),
+                codigo_cliente: codigoCliente || 'SEM_CODIGO',
                 nome_cliente: cliente,
                 nome_produto: produto, // Primeiro produto
                 unidade: unidade,
@@ -631,8 +639,28 @@ const parseCSV = (csvText: string): Pedido[] => {
             pedidosMap.set(numeroPedido, novoPedido);
         }
     }
-    
-    return Array.from(pedidosMap.values());
+
+    const pedidos = Array.from(pedidosMap.values());
+    const pedidosComCodigo = pedidos.filter(p => p.codigo_cliente && p.codigo_cliente !== 'SEM_CODIGO');
+
+    console.log('[CSV PARSER] Resumo da importação:');
+    console.log(`[CSV PARSER] - Total de pedidos: ${pedidos.length}`);
+    console.log(`[CSV PARSER] - Com código de cliente: ${pedidosComCodigo.length}`);
+    console.log(`[CSV PARSER] - Sem código: ${pedidos.length - pedidosComCodigo.length}`);
+
+    if (pedidos.length > 0 && pedidos.length <= 5) {
+        console.log('[CSV PARSER] Primeiros pedidos importados:');
+        pedidos.forEach(p => {
+            console.log(`[CSV PARSER]   - Pedido ${p.numero_pedido}: Cliente ${p.nome_cliente} (Código: ${p.codigo_cliente})`);
+        });
+    } else if (pedidos.length > 0) {
+        console.log('[CSV PARSER] Primeiros 3 pedidos importados:');
+        pedidos.slice(0, 3).forEach(p => {
+            console.log(`[CSV PARSER]   - Pedido ${p.numero_pedido}: Cliente ${p.nome_cliente} (Código: ${p.codigo_cliente})`);
+        });
+    }
+
+    return pedidos;
 };
 
 export const api = {
