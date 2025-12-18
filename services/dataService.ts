@@ -528,7 +528,15 @@ const parseCSV = (csvText: string): Pedido[] => {
 
         const rawNumero = idxNumero >= 0 ? cols[idxNumero] : cols[0];
         const cliente = idxCliente >= 0 ? cols[idxCliente] : cols[1];
-        const codigoCliente = idxCodigoCliente >= 0 && cols[idxCodigoCliente] ? cols[idxCodigoCliente].trim() : '';
+
+        // LIMPEZA RIGOROSA DO CÓDIGO DO CLIENTE
+        let codigoCliente = '';
+        if (idxCodigoCliente >= 0 && cols[idxCodigoCliente]) {
+            codigoCliente = cols[idxCodigoCliente]
+                .trim()                           // Remove espaços
+                .replace(/[^\d]/g, '')           // Remove TUDO que não é número
+                .replace(/^0+/, '');             // Remove zeros à esquerda
+        }
 
         const ignoreTerms = ['total', 'página', 'relatório', 'impresso', 'emitido'];
         if (!rawNumero || !cliente || ignoreTerms.some(term => String(rawNumero).toLowerCase().includes(term) || String(cliente).toLowerCase().includes(term))) continue;
@@ -540,7 +548,7 @@ const parseCSV = (csvText: string): Pedido[] => {
             console.log(`[CSV PARSER] Linha ${i}:`);
             console.log(`  - Pedido: ${numeroPedido}`);
             console.log(`  - Cliente: ${cliente}`);
-            console.log(`  - Código Cliente: "${codigoCliente}" (coluna ${idxCodigoCliente}, valor raw: "${cols[idxCodigoCliente]}")`);
+            console.log(`  - Código Cliente LIMPO: "${codigoCliente}" (índice coluna: ${idxCodigoCliente}, valor original: "${cols[idxCodigoCliente]}")`);
         }
 
         // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
