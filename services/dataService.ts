@@ -535,9 +535,12 @@ const parseCSV = (csvText: string): Pedido[] => {
 
         const numeroPedido = String(rawNumero).trim().replace(/\s/g, '');
 
-        // Log detalhado das primeiras 3 linhas para debug
-        if (i <= headerIndex + 3) {
-            console.log(`[CSV PARSER] Linha ${i}: Pedido=${numeroPedido}, Cliente=${cliente}, CodCliente="${codigoCliente}"`);
+        // Log detalhado das primeiras 5 linhas para debug
+        if (i <= headerIndex + 5) {
+            console.log(`[CSV PARSER] Linha ${i}:`);
+            console.log(`  - Pedido: ${numeroPedido}`);
+            console.log(`  - Cliente: ${cliente}`);
+            console.log(`  - Código Cliente: "${codigoCliente}" (coluna ${idxCodigoCliente}, valor raw: "${cols[idxCodigoCliente]}")`);
         }
 
         // Produto Logic - Fallback inteligente se a coluna exata não for encontrada
@@ -1818,12 +1821,28 @@ export const api = {
             // Verifica se já existe no Supabase
             const { data: existing } = await supabase
               .from('pedidos')
-              .select('id')
+              .select('id, codigo_cliente')
               .eq('id', pedido.id)
               .maybeSingle();
 
-            // PRESERVAR: Se já existe, não atualiza
+            // Se já existe, atualiza apenas o código do cliente se necessário
             if (existing) {
+              const codigoAtual = existing.codigo_cliente;
+              const codigoNovo = pedido.codigo_cliente;
+
+              // Atualiza se: não tem código, código é SEM_CODIGO, ou código parece inválido (começa com C seguido de números)
+              const precisaAtualizar = !codigoAtual ||
+                                       codigoAtual === 'SEM_CODIGO' ||
+                                       /^C\d+$/.test(codigoAtual);
+
+              if (precisaAtualizar && codigoNovo && codigoNovo !== 'SEM_CODIGO') {
+                console.log(`[SYNC] Atualizando código do pedido ${pedido.numero_pedido}: "${codigoAtual}" → "${codigoNovo}"`);
+                await supabase
+                  .from('pedidos')
+                  .update({ codigo_cliente: codigoNovo })
+                  .eq('id', pedido.id);
+              }
+
               continue;
             }
 
@@ -1850,6 +1869,7 @@ export const api = {
               updated_at: new Date().toISOString()
             };
 
+            console.log(`[SYNC] Inserindo pedido ${pedido.numero_pedido} com código cliente: "${pedido.codigo_cliente}"`);
             await supabase.from('pedidos').insert(pedidoPayload);
           }
 
@@ -1886,6 +1906,35 @@ export const api = {
           }
         } catch (e) {
           console.warn("Erro ao sincronizar pedidos com Supabase", e);
+        }
+
+        // ATUALIZA SOLICITAÇÕES: Corrige códigos de cliente em solicitações existentes
+        try {
+          const { data: solicitacoesDB } = await supabase
+            .from('solicitacoes')
+            .select('id, pedido_id, codigo_cliente');
+
+          if (solicitacoesDB) {
+            for (const sol of solicitacoesDB) {
+              const pedido = novosPedidos.find(p => p.id === sol.pedido_id);
+              if (pedido && pedido.codigo_cliente && pedido.codigo_cliente !== 'SEM_CODIGO') {
+                const codigoAtual = sol.codigo_cliente;
+                const precisaAtualizar = !codigoAtual ||
+                                         codigoAtual === 'SEM_CODIGO' ||
+                                         /^C\d+$/.test(codigoAtual);
+
+                if (precisaAtualizar) {
+                  console.log(`[SYNC] Atualizando código da solicitação ${sol.id}: "${codigoAtual}" → "${pedido.codigo_cliente}"`);
+                  await supabase
+                    .from('solicitacoes')
+                    .update({ codigo_cliente: pedido.codigo_cliente })
+                    .eq('id', sol.id);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Erro ao atualizar códigos de cliente nas solicitações", e);
         }
 
         const mensagensLog = [`Novos: ${added}`];
